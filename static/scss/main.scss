@@ -1,0 +1,273 @@
+// =============================================================================
+// ARCHIVO PRINCIPAL DE ESTILOS - MAIL ADMON
+// =============================================================================
+
+// Importar variables de colores
+@import 'colors';
+
+// Importar componentes
+@import 'components/buttons';
+@import 'components/forms';
+@import 'components/tables';
+@import 'components/modals';
+@import 'components/messages';
+@import 'components/badges';
+
+// Importar UI específica
+@import 'ui/auth';
+@import 'ui/dashboard';
+
+// =============================================================================
+// RESET Y BASE
+// =============================================================================
+
+* {
+  box-sizing: border-box;
+  margin: 0;
+  padding: 0;
+}
+
+html {
+  font-size: 16px;
+  line-height: 1.5;
+}
+
+body {
+  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;
+  background: $bg-primary;
+  background-image: 
+    radial-gradient(at 0% 0%, rgba($primary-color, 0.05) 0px, transparent 50%),
+    radial-gradient(at 100% 100%, rgba($primary-color, 0.03) 0px, transparent 50%);
+  color: $text-primary;
+  line-height: 1.6;
+  padding: 20px;
+  min-height: 100vh;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+}
+
+.container {
+  max-width: 1200px;
+  margin: 0 auto;
+}
+
+// =============================================================================
+// HEADER
+// =============================================================================
+
+header {
+  background: $gradient-surface;
+  border: 1px solid $border;
+  border-radius: $border-radius-lg;
+  padding: 30px;
+  margin-bottom: 30px;
+  box-shadow: $shadow-lg;
+  backdrop-filter: blur(10px);
+}
+
+header h1 {
+  font-size: 2rem;
+  margin-bottom: 5px;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  color: $text-primary;
+  
+  i {
+    color: $primary-color;
+  }
+}
+
+header .subtitle {
+  color: $text-secondary;
+  font-size: 1rem;
+}
+
+header a {
+  color: $text-secondary;
+  transition: $transition-fast;
+  
+  &:hover {
+    color: $text-primary;
+  }
+}
+
+// =============================================================================
+// BARRA DE ACCIONES
+// =============================================================================
+
+.actions-bar {
+  display: flex;
+  gap: 10px;
+  margin-bottom: 20px;
+  flex-wrap: wrap;
+}
+
+// =============================================================================
+// UTILIDADES
+// =============================================================================
+
+// Visibilidad
+.visible {
+  visibility: visible !important;
+  opacity: 1 !important;
+}
+
+.hidden {
+  visibility: hidden !important;
+  opacity: 0 !important;
+}
+
+// Posicionamiento
+.position-relative {
+  position: relative !important;
+}
+
+.position-absolute {
+  position: absolute !important;
+}
+
+.position-fixed {
+  position: fixed !important;
+}
+
+// Z-index
+.z-index-1 { z-index: 1 !important; }
+.z-index-10 { z-index: 10 !important; }
+.z-index-100 { z-index: 100 !important; }
+.z-index-1000 { z-index: 1000 !important; }
+.z-index-9999 { z-index: 9999 !important; }
+
+// =============================================================================
+// ANIMACIONES GLOBALES
+// =============================================================================
+
+@keyframes fadeIn {
+  from {
+    opacity: 0;
+    transform: translateY(-10px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+@keyframes slideInUp {
+  from {
+    opacity: 0;
+    transform: translateY(20px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+@keyframes slideDown {
+  from {
+    transform: translateY(-20px);
+    opacity: 0;
+  }
+  to {
+    transform: translateY(0);
+    opacity: 1;
+  }
+}
+
+@keyframes slideInRight {
+  from {
+    transform: translateX(100%);
+    opacity: 0;
+  }
+  to {
+    transform: translateX(0);
+    opacity: 1;
+  }
+}
+
+@keyframes scaleIn {
+  from {
+    opacity: 0;
+    transform: scale(0.9);
+  }
+  to {
+    opacity: 1;
+    transform: scale(1);
+  }
+}
+
+// Clases de animación
+.animate-fade-in {
+  animation: fadeIn 0.3s ease-out;
+}
+
+.animate-slide-up {
+  animation: slideInUp 0.3s ease-out;
+}
+
+.animate-scale-in {
+  animation: scaleIn 0.3s ease-out;
+}
+
+// =============================================================================
+// RESPONSIVE
+// =============================================================================
+
+@media (max-width: $breakpoint-md) {
+  html {
+    font-size: 14px;
+  }
+  
+  body {
+    padding: 10px;
+  }
+
+  header h1 {
+    font-size: 1.5rem;
+  }
+
+  .actions-bar {
+    flex-direction: column;
+  }
+
+  .users-table-container {
+    overflow-x: auto;
+  }
+
+  .users-table {
+    min-width: 600px;
+  }
+}
+
+@media (max-width: $breakpoint-sm) {
+  html {
+    font-size: 13px;
+  }
+}
+
+// =============================================================================
+// LINKS Y CÓDIGO
+// =============================================================================
+
+a {
+  color: $primary-color;
+  text-decoration: none;
+  transition: $transition-fast;
+  
+  &:hover {
+    color: $primary-light;
+    text-decoration: underline;
+  }
+}
+
+code {
+  background: rgba($primary-color, 0.1);
+  color: $primary-light;
+  padding: 2px 6px;
+  border-radius: 4px;
+  font-family: 'Courier New', monospace;
+  font-size: 0.9em;
+  border: 1px solid rgba($primary-color, 0.2);
+}
+
