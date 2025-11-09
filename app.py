@@ -819,4 +819,4 @@ if __name__ == '__main__':
     init_db()
     
     # Ejecutar aplicación
-    app.run(host='0.0.0.0', port=5000, debug=app.config.get('DEBUG', False))
+    app.run(host='0.0.0.0', port=5050, debug=app.config.get('DEBUG', False))
