@@ -8,6 +8,7 @@ import subprocess
 import shutil
 import sys
 import getpass
+from tempfile import NamedTemporaryFile
 from datetime import datetime, timedelta
 from pathlib import Path
 from flask import Flask, render_template, request, jsonify, redirect, url_for, flash, session
@@ -378,6 +379,7 @@ def write_users_file(users):
     try:
         ensure_users_file_permissions()
         backup_path = get_backup_path()
+        users_dir = os.path.dirname(USERS_FILE) or '.'
         
         # Crear backup
         if os.path.exists(USERS_FILE):
@@ -395,22 +397,38 @@ def write_users_file(users):
                     "Continuando sin backup."
                 )
         
-        # Escribir archivo
-        with open(USERS_FILE, 'w') as f:
-            for user in users:
-                line = f"{user['email']}:{user['hash']}:{user['uid']}:{user['gid']}:{user['gecos']}:{user['home']}:{user['shell']}\n"
-                f.write(line)
-        
-        # Ajustar permisos (solo en Linux)
-        if os.name != 'nt':
-            os.chmod(USERS_FILE, 0o644)
-            try:
-                import pwd, grp
-                root_uid = pwd.getpwnam('root').pw_uid
-                soop_gid = grp.getgrnam('soopmail').gr_gid
-                os.chown(USERS_FILE, root_uid, soop_gid)
-            except:
-                pass  # Ignorar errores de permisos en desarrollo
+        temp_path = None
+        try:
+            with NamedTemporaryFile('w', dir=users_dir, delete=False) as tmp:
+                temp_path = tmp.name
+                for user in users:
+                    line = (
+                        f"{user['email']}:{user['hash']}:{user['uid']}:"
+                        f"{user['gid']}:{user['gecos']}:{user['home']}:{user['shell']}\n"
+                    )
+                    tmp.write(line)
+            
+            if os.name != 'nt':
+                os.chmod(temp_path, 0o644)
+            
+            shutil.move(temp_path, USERS_FILE)
+            
+            # Ajustar permisos (solo en Linux) después del reemplazo
+            if os.name != 'nt':
+                os.chmod(USERS_FILE, 0o644)
+                try:
+                    import pwd, grp
+                    root_uid = pwd.getpwnam('root').pw_uid
+                    soop_gid = grp.getgrnam('soopmail').gr_gid
+                    os.chown(USERS_FILE, root_uid, soop_gid)
+                except Exception as perm_error:
+                    app.logger.debug(f"[SOOP_USERS] No se pudo ajustar propietario/grupo: {perm_error}")
+        finally:
+            if temp_path and os.path.exists(temp_path):
+                try:
+                    os.remove(temp_path)
+                except Exception:
+                    pass
         
         return True
     except Exception as e:
