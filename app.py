@@ -167,9 +167,11 @@ def read_users_file():
     """Lee el archivo de usuarios y retorna lista de usuarios"""
     users = []
     if not os.path.exists(USERS_FILE):
+        app.logger.warning(f"[SOOP_USERS] Archivo de usuarios no encontrado: {USERS_FILE}")
         return users
     
     try:
+        app.logger.info(f"[SOOP_USERS] Leyendo archivo de usuarios: {USERS_FILE}")
         with open(USERS_FILE, 'r') as f:
             for line in f:
                 line = line.strip()
@@ -195,7 +197,9 @@ def read_users_file():
                         'home': home,
                         'shell': shell
                     })
+        app.logger.info(f"[SOOP_USERS] Total de usuarios cargados: {len(users)}")
     except Exception as e:
+        app.logger.error(f"[SOOP_USERS] Error al leer archivo {USERS_FILE}: {e}")
         raise Exception(f"Error al leer archivo de usuarios: {str(e)}")
     
     return users
@@ -271,6 +275,8 @@ def restart_soop_mail():
 @app.route('/login', methods=['GET', 'POST'])
 def login():
     """Página de login"""
+    allow_registration = User.query.count() == 0
+    
     if current_user.is_authenticated:
         return redirect(url_for('index'))
     
@@ -284,7 +290,7 @@ def login():
             if request.is_json:
                 return jsonify({'success': False, 'error': 'Usuario y contraseña son requeridos'}), 400
             flash('Usuario y contraseña son requeridos', 'error')
-            return render_template('login.html')
+            return render_template('login.html', allow_registration=allow_registration)
         
         # Buscar usuario por username o email
         user = User.query.filter(
@@ -321,7 +327,84 @@ def login():
                 return jsonify({'success': False, 'error': 'Usuario o contraseña incorrectos'}), 401
             flash('Usuario o contraseña incorrectos', 'error')
     
-    return render_template('login.html')
+    return render_template('login.html', allow_registration=allow_registration)
+
+
+@app.route('/register', methods=['GET', 'POST'])
+def register():
+    """Registro inicial de administrador (solo cuando no existen usuarios)"""
+    allow_registration = User.query.count() == 0
+    
+    if current_user.is_authenticated:
+        return redirect(url_for('index'))
+    
+    if not allow_registration:
+        flash('El registro está deshabilitado. Inicia sesión con una cuenta existente.', 'error')
+        return redirect(url_for('login'))
+    
+    if request.method == 'POST':
+        data = request.get_json() if request.is_json else request.form
+        username = data.get('username', '').strip()
+        email = data.get('email', '').strip()
+        full_name = data.get('full_name', '').strip()
+        password = data.get('password', '')
+        password_confirm = data.get('password_confirm', '')
+        
+        def error_response(message, status=400):
+            if request.is_json:
+                return jsonify({'success': False, 'error': message}), status
+            flash(message, 'error')
+            return render_template('register.html', allow_registration=allow_registration), status
+        
+        if not username or not email or not password or not password_confirm:
+            return error_response('Todos los campos son requeridos')
+        
+        if not validate_email(email):
+            return error_response('Formato de email inválido')
+        
+        if password != password_confirm:
+            return error_response('Las contraseñas no coinciden')
+        
+        if len(password) < 8:
+            return error_response('La contraseña debe tener al menos 8 caracteres')
+        
+        if User.query.filter_by(username=username).first():
+            return error_response('El nombre de usuario ya existe')
+        
+        if User.query.filter_by(email=email).first():
+            return error_response('El email ya está registrado')
+        
+        try:
+            password_hash = bcrypt.generate_password_hash(password).decode('utf-8')
+            user = User(
+                username=username,
+                email=email,
+                password_hash=password_hash,
+                full_name=full_name or username,
+                is_active=True,
+                is_admin=True
+            )
+            db.session.add(user)
+            db.session.commit()
+            
+            create_user_session(user, remember=True)
+            login_user(user, remember=True)
+            log_audit('REGISTER_ADMIN_USER', 'User', str(user.id), f'Usuario administrador {username} registrado desde formulario público')
+            
+            if request.is_json:
+                return jsonify({
+                    'success': True,
+                    'message': 'Usuario administrador creado exitosamente',
+                    'user': user.to_dict()
+                })
+            
+            flash('Cuenta creada exitosamente. Bienvenido.', 'success')
+            return redirect(url_for('index'))
+        except Exception as e:
+            db.session.rollback()
+            return error_response(f'Error al registrar usuario: {str(e)}', status=500)
+    
+    return render_template('register.html', allow_registration=allow_registration)
 
 
 @app.route('/logout')
@@ -355,6 +438,7 @@ def get_users():
     """Obtiene la lista de usuarios"""
     try:
         users = read_users_file()
+        app.logger.info(f"[SOOP_USERS] Enviando listado de usuarios. Total: {len(users)}. Archivo: {USERS_FILE}")
         # No exponer el hash completo por seguridad
         users_list = []
         for user in users:
