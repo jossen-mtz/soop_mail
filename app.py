@@ -46,15 +46,82 @@ login_manager.login_message_category = 'info'
 login_manager.session_protection = "strong"
 
 # Configuración de soop MAIL
-USERS_FILE = app.config.get('SOOP_MAIL_USERS_FILE', '/etc/soop_mail/users')
-MAIL_BASE = app.config.get('SOOP_MAIL_BASE', '/var/mail/soop_mail')
+IS_DEVELOPMENT = app.config.get('DEVELOPMENT', False)
+
+
+def _resolve_path(description, expect_dir, candidates):
+    """Selecciona la ruta existente más adecuada según los candidatos proporcionados."""
+    seen = set()
+    for candidate in candidates:
+        if not candidate:
+            continue
+        expanded = os.path.expanduser(candidate)
+        if not os.path.isabs(expanded):
+            expanded = os.path.abspath(os.path.join(app.root_path, expanded))
+        normalized = os.path.normpath(expanded)
+        if normalized in seen:
+            continue
+        seen.add(normalized)
+        
+        try:
+            if expect_dir and os.path.isdir(normalized):
+                app.logger.info(f"[SOOP_CONFIG] Usando {description}: {normalized}")
+                return normalized
+            if not expect_dir and os.path.isfile(normalized):
+                app.logger.info(f"[SOOP_CONFIG] Usando {description}: {normalized}")
+                return normalized
+        except Exception as e:
+            app.logger.debug(f"[SOOP_CONFIG] No se pudo validar {normalized}: {e}")
+            continue
+    
+    fallback = next((c for c in candidates if c), None)
+    if fallback:
+        expanded_fallback = os.path.expanduser(fallback)
+        if not os.path.isabs(expanded_fallback):
+            expanded_fallback = os.path.abspath(os.path.join(app.root_path, expanded_fallback))
+        app.logger.warning(
+            f"[SOOP_CONFIG] No se encontró un {description} existente. "
+            f"Usando valor por defecto: {expanded_fallback}"
+        )
+        return os.path.normpath(expanded_fallback)
+    
+    app.logger.error(f"[SOOP_CONFIG] No se pudo determinar un {description} válido.")
+    return None
+
+
+_users_candidates = [
+    os.getenv('SOOP_MAIL_USERS_FILE'),
+    app.config.get('SOOP_MAIL_USERS_FILE'),
+    '/etc/soop_mail/users',
+    '/etc/dovecot/users',
+    '/var/lib/dovecot/users',
+    '/var/mail/soop_mail/users',
+    '/srv/vmail/users'
+]
+
+if IS_DEVELOPMENT:
+    _users_candidates.insert(0, os.getenv('USERS_FILE'))
+    _users_candidates.append('./soop_mail/users')
+
+USERS_FILE = _resolve_path('archivo de usuarios soop MAIL', expect_dir=False, candidates=_users_candidates)
+
+_mail_base_candidates = [
+    os.getenv('SOOP_MAIL_BASE'),
+    app.config.get('SOOP_MAIL_BASE'),
+    '/var/mail/soop_mail',
+    '/var/mail/vmail',
+    '/var/vmail',
+    '/srv/vmail'
+]
+
+if IS_DEVELOPMENT:
+    _mail_base_candidates.insert(0, os.getenv('MAIL_BASE'))
+    _mail_base_candidates.append('./soop_mail/mail')
+
+MAIL_BASE = _resolve_path('directorio base de correo soop MAIL', expect_dir=True, candidates=_mail_base_candidates)
+
 VMAIL_UID = app.config.get('SOOP_MAIL_VMAIL_UID', 5000)
 VMAIL_GID = app.config.get('SOOP_MAIL_VMAIL_GID', 5000)
-
-# Configuración desde variables de entorno (para desarrollo)
-if app.config.get('DEVELOPMENT'):
-    USERS_FILE = os.getenv('USERS_FILE', USERS_FILE)
-    MAIL_BASE = os.getenv('MAIL_BASE', MAIL_BASE)
 
 
 @login_manager.user_loader
