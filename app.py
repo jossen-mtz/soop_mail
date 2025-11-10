@@ -189,17 +189,36 @@ def ensure_users_file_permissions():
             )
         
         bak_path = f"{USERS_FILE}.bak"
-        if os.path.exists(bak_path) and not os.access(bak_path, os.W_OK):
-            current_user = getpass.getuser()
-            raise PermissionError(
-                f"No se puede escribir el backup {bak_path}. Ajusta permisos para '{current_user}'."
-            )
     except PermissionError as e:
         app.logger.error(f"[SOOP_MAIL] Permisos insuficientes para archivo de usuarios: {e}")
         raise
     except Exception as e:
         app.logger.error(f"[SOOP_MAIL] Error al validar archivo de usuarios: {e}")
         raise
+
+
+def get_backup_path():
+    """Determina la ruta donde se guardará el backup del archivo de usuarios."""
+    backup_dir = os.getenv('SOOP_MAIL_USERS_BACKUP_DIR')
+    
+    if backup_dir:
+        backup_dir = os.path.expanduser(backup_dir)
+        if not os.path.isabs(backup_dir):
+            backup_dir = os.path.abspath(os.path.join(app.root_path, backup_dir))
+        try:
+            os.makedirs(backup_dir, exist_ok=True)
+            if not (os.access(backup_dir, os.W_OK) and os.access(backup_dir, os.X_OK)):
+                current_user = getpass.getuser()
+                raise PermissionError(
+                    f"El directorio de backups {backup_dir} no es escribible "
+                    f"por el usuario '{current_user}'."
+                )
+            return os.path.join(backup_dir, 'users.bak')
+        except Exception as e:
+            app.logger.warning(f"[SOOP_MAIL] No se pudo utilizar SOOP_MAIL_USERS_BACKUP_DIR ({backup_dir}): {e}")
+    
+    users_dir = os.path.dirname(USERS_FILE) or '.'
+    return os.path.join(users_dir, 'users.bak')
 
 
 @login_manager.user_loader
@@ -354,10 +373,23 @@ def write_users_file(users):
     """Escribe la lista de usuarios al archivo"""
     try:
         ensure_users_file_permissions()
+        backup_path = get_backup_path()
         
         # Crear backup
         if os.path.exists(USERS_FILE):
-            shutil.copy(USERS_FILE, f"{USERS_FILE}.bak")
+            try:
+                shutil.copy2(USERS_FILE, backup_path)
+                app.logger.info(f"[SOOP_USERS] Backup del archivo de usuarios guardado en {backup_path}")
+            except PermissionError as e:
+                app.logger.warning(
+                    f"[SOOP_USERS] No se pudo guardar backup en {backup_path}: {e}. "
+                    "Continuando sin backup."
+                )
+            except Exception as e:
+                app.logger.warning(
+                    f"[SOOP_USERS] Error inesperado al crear backup ({backup_path}): {e}. "
+                    "Continuando sin backup."
+                )
         
         # Escribir archivo
         with open(USERS_FILE, 'w') as f:
