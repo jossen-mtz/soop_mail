@@ -158,6 +158,50 @@ def ensure_mail_base_permissions():
         raise
 
 
+def ensure_users_file_permissions():
+    """Valida que el archivo de usuarios (o su directorio) sea accesible para escritura."""
+    if not USERS_FILE:
+        raise Exception("El archivo de usuarios soop MAIL no está configurado correctamente.")
+    
+    try:
+        users_dir = os.path.dirname(USERS_FILE) or '.'
+        users_dir = os.path.abspath(users_dir)
+        
+        if not os.path.exists(users_dir):
+            raise PermissionError(
+                f"El directorio {users_dir} no existe. Crea el directorio o actualiza SOOP_MAIL_USERS_FILE."
+            )
+        
+        if not os.path.isdir(users_dir):
+            raise Exception(f"{users_dir} existe pero no es un directorio válido.")
+        
+        if not (os.access(users_dir, os.W_OK) and os.access(users_dir, os.X_OK)):
+            current_user = getpass.getuser()
+            raise PermissionError(
+                f"El proceso no tiene permisos de escritura en {users_dir}. "
+                f"Asegúrate de que el usuario '{current_user}' o el usuario del servicio tenga acceso."
+            )
+        
+        if os.path.exists(USERS_FILE) and not os.access(USERS_FILE, os.W_OK):
+            current_user = getpass.getuser()
+            raise PermissionError(
+                f"El archivo {USERS_FILE} no es escribible. Ajusta permisos para '{current_user}'."
+            )
+        
+        bak_path = f"{USERS_FILE}.bak"
+        if os.path.exists(bak_path) and not os.access(bak_path, os.W_OK):
+            current_user = getpass.getuser()
+            raise PermissionError(
+                f"No se puede escribir el backup {bak_path}. Ajusta permisos para '{current_user}'."
+            )
+    except PermissionError as e:
+        app.logger.error(f"[SOOP_MAIL] Permisos insuficientes para archivo de usuarios: {e}")
+        raise
+    except Exception as e:
+        app.logger.error(f"[SOOP_MAIL] Error al validar archivo de usuarios: {e}")
+        raise
+
+
 @login_manager.user_loader
 def load_user(user_id):
     """Carga el usuario desde la base de datos"""
@@ -309,6 +353,8 @@ def read_users_file():
 def write_users_file(users):
     """Escribe la lista de usuarios al archivo"""
     try:
+        ensure_users_file_permissions()
+        
         # Crear backup
         if os.path.exists(USERS_FILE):
             shutil.copy(USERS_FILE, f"{USERS_FILE}.bak")
@@ -332,7 +378,10 @@ def write_users_file(users):
         
         return True
     except Exception as e:
-        raise Exception(f"Error al escribir archivo de usuarios: {str(e)}")
+        raise Exception(
+            "Error al escribir archivo de usuarios: "
+            f"{e}. Verifica permisos sobre '{USERS_FILE}' o ajusta SOOP_MAIL_USERS_FILE."
+        )
 
 
 def create_mail_directory(email):
