@@ -7,6 +7,7 @@ import re
 import subprocess
 import shutil
 import sys
+import getpass
 from datetime import datetime, timedelta
 from pathlib import Path
 from flask import Flask, render_template, request, jsonify, redirect, url_for, flash, session
@@ -122,6 +123,39 @@ MAIL_BASE = _resolve_path('directorio base de correo soop MAIL', expect_dir=True
 
 VMAIL_UID = app.config.get('SOOP_MAIL_VMAIL_UID', 5000)
 VMAIL_GID = app.config.get('SOOP_MAIL_VMAIL_GID', 5000)
+
+
+def ensure_mail_base_permissions():
+    """Verifica que el directorio base de correo exista y sea escribible."""
+    if not MAIL_BASE:
+        raise Exception("El directorio base de correo no está configurado correctamente.")
+    
+    try:
+        if not os.path.exists(MAIL_BASE):
+            parent_dir = os.path.dirname(MAIL_BASE) or '/'
+            if not os.access(parent_dir, os.W_OK | os.X_OK):
+                raise PermissionError(
+                    f"No hay permisos para crear {MAIL_BASE}. "
+                    f"Ajusta permisos del directorio padre {parent_dir}."
+                )
+            os.makedirs(MAIL_BASE, exist_ok=True)
+            app.logger.info(f"[SOOP_MAIL] Directorio base creado: {MAIL_BASE}")
+        
+        if not os.path.isdir(MAIL_BASE):
+            raise Exception(f"{MAIL_BASE} existe pero no es un directorio.")
+        
+        if not (os.access(MAIL_BASE, os.W_OK) and os.access(MAIL_BASE, os.X_OK)):
+            current_user = getpass.getuser()
+            raise PermissionError(
+                f"El proceso no tiene permisos de escritura/ejecución en {MAIL_BASE}. "
+                f"Asegúrate de que el usuario '{current_user}' o el usuario del servicio tenga acceso."
+            )
+    except PermissionError as e:
+        app.logger.error(f"[SOOP_MAIL] Permisos insuficientes en {MAIL_BASE}: {e}")
+        raise
+    except Exception as e:
+        app.logger.error(f"[SOOP_MAIL] Error al verificar {MAIL_BASE}: {e}")
+        raise
 
 
 @login_manager.user_loader
@@ -304,6 +338,8 @@ def write_users_file(users):
 def create_mail_directory(email):
     """Crea el directorio de correo para el usuario"""
     try:
+        ensure_mail_base_permissions()
+        
         domain = email.split('@')[1]
         username = email.split('@')[0]
         mail_dir = os.path.join(MAIL_BASE, domain, username)
@@ -323,7 +359,10 @@ def create_mail_directory(email):
         
         return mail_dir
     except Exception as e:
-        raise Exception(f"Error al crear directorio de correo: {str(e)}")
+        raise Exception(
+            "Error al crear directorio de correo: "
+            f"{e}. Revisa permisos de '{MAIL_BASE}' o configura SOOP_MAIL_BASE."
+        )
 
 
 def restart_soop_mail():
