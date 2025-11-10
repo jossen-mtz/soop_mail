@@ -17,6 +17,7 @@ from werkzeug.security import generate_password_hash
 from functools import wraps
 from dotenv import load_dotenv
 import json
+import crypt
 
 # Cargar variables de entorno desde .env
 load_dotenv()
@@ -321,10 +322,9 @@ def generate_password_hash_soop_mail(password):
     except subprocess.CalledProcessError as e:
         raise Exception(f"Error al generar hash: {e.stderr}")
     except FileNotFoundError:
-        # Para desarrollo sin doveadm instalado
-        if app.config.get('DEVELOPMENT'):
-            return f"$6$dev_hash${password}"
-        raise Exception("soop-mailtools no está instalado")
+        app.logger.warning("[SOOP_MAIL] soop-mailtool no encontrado; usando fallback interno SHA512-CRYPT.")
+        salt = crypt.mksalt(crypt.METHOD_SHA512)
+        return crypt.crypt(password, salt)
 
 
 def read_users_file():
