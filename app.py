@@ -318,13 +318,17 @@ def generate_password_hash_soop_mail(password):
             text=True,
             check=True
         )
-        return result.stdout.strip()
+        raw_hash = result.stdout.strip()
     except subprocess.CalledProcessError as e:
         raise Exception(f"Error al generar hash: {e.stderr}")
     except FileNotFoundError:
         app.logger.warning("[SOOP_MAIL] soop-mailtool no encontrado; usando fallback interno SHA512-CRYPT.")
         salt = crypt.mksalt(crypt.METHOD_SHA512)
-        return crypt.crypt(password, salt)
+        raw_hash = crypt.crypt(password, salt)
+    
+    if not raw_hash.startswith('{SHA512-CRYPT}'):
+        raw_hash = f"{{SHA512-CRYPT}}{raw_hash}"
+    return raw_hash
 
 
 def read_users_file():
