@@ -44,4 +44,7 @@ mail/
 .DS_Store
 Thumbs.db
 
+# SQL
+*.sql
+
 

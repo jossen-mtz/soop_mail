@@ -2,6 +2,7 @@
 Configuración de la aplicación
 """
 import os
+from urllib.parse import quote_plus
 from datetime import timedelta
 
 class Config:
@@ -15,22 +16,47 @@ class Config:
     MYSQL_USER = os.environ.get('MYSQL_USER') or 'root'
     MYSQL_PASSWORD = os.environ.get('MYSQL_PASSWORD') or ''
     MYSQL_DATABASE = os.environ.get('MYSQL_DATABASE') or 'soop_mail_admin'
+    MYSQL_SOCKET = os.environ.get('MYSQL_SOCKET')
+    MYSQL_DRIVER = 'mysql+pymysql'
     
-    # SQLAlchemy con pool de conexiones optimizado
-    SQLALCHEMY_DATABASE_URI = (
-        f"mysql+pymysql://{MYSQL_USER}:{MYSQL_PASSWORD}@{MYSQL_HOST}:{MYSQL_PORT}/{MYSQL_DATABASE}"
-        f"?charset=utf8mb4"
-    )
+    _encoded_password = quote_plus(MYSQL_PASSWORD) if MYSQL_PASSWORD else ''
+    _auth = f"{MYSQL_USER}:{_encoded_password}" if _encoded_password else MYSQL_USER
+    
+    if MYSQL_SOCKET:
+        _encoded_socket = quote_plus(MYSQL_SOCKET)
+        SQLALCHEMY_DATABASE_URI = (
+            f"{MYSQL_DRIVER}://{_auth}@/{MYSQL_DATABASE}"
+            f"?charset=utf8mb4&unix_socket={_encoded_socket}"
+        )
+        SQLALCHEMY_ENGINE_OPTIONS = {
+            'pool_size': 10,
+            'max_overflow': 20,
+            'pool_recycle': 3600,
+            'pool_pre_ping': True,
+            'connect_args': {
+                'unix_socket': MYSQL_SOCKET,
+                'charset': 'utf8mb4'
+            }
+        }
+    else:
+        SQLALCHEMY_DATABASE_URI = (
+            f"{MYSQL_DRIVER}://{_auth}@{MYSQL_HOST}:{MYSQL_PORT}/{MYSQL_DATABASE}"
+            f"?charset=utf8mb4"
+        )
+        SQLALCHEMY_ENGINE_OPTIONS = {
+            'pool_size': 10,
+            'max_overflow': 20,
+            'pool_recycle': 3600,
+            'pool_pre_ping': True,
+            'connect_args': {
+                'charset': 'utf8mb4'
+            }
+        }
     
     SQLALCHEMY_TRACK_MODIFICATIONS = False
     # Configuración del pool de conexiones MySQL
     # Los parámetros del pool van directamente en SQLALCHEMY_ENGINE_OPTIONS
-    SQLALCHEMY_ENGINE_OPTIONS = {
-        'pool_size': 10,
-        'max_overflow': 20,
-        'pool_recycle': 3600,
-        'pool_pre_ping': True
-    }
+    
     # Parámetros específicos de PyMySQL van en connect_args
     # Pero Flask-SQLAlchemy los maneja automáticamente desde la URL
     
