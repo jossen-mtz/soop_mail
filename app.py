@@ -53,8 +53,8 @@ VMAIL_GID = app.config.get('SOOP_MAIL_VMAIL_GID', 5000)
 
 # Configuración desde variables de entorno (para desarrollo)
 if app.config.get('DEVELOPMENT'):
-    USERS_FILE = os.getenv('USERS_FILE', './soop_mail/users')
-    MAIL_BASE = os.getenv('MAIL_BASE', './soop_mail/mail')
+    USERS_FILE = os.getenv('USERS_FILE', USERS_FILE)
+    MAIL_BASE = os.getenv('MAIL_BASE', MAIL_BASE)
 
 
 @login_manager.user_loader
