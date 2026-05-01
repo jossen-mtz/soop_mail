@@ -1,0 +1,14 @@
+{
+  "name": "Soop Mail",
+  "short_name": "Soop Mail",
+  "icons": [
+    {
+      "src": "/favicon.png",
+      "sizes": "512x512",
+      "type": "image/png"
+    }
+  ],
+  "theme_color": "#0ea5e9",
+  "background_color": "#ffffff",
+  "display": "standalone"
+}
