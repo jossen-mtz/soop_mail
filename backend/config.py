@@ -2,8 +2,13 @@ import os
 from dotenv import load_dotenv
 
 def load_environment():
+    # Load root .env first to get APP_ENV if present
+    root_env = os.path.join(os.path.dirname(os.path.dirname(__file__)), ".env")
+    if os.path.exists(root_env):
+        load_dotenv(root_env)
+        
     # Detect environment from APP_ENV variable, default to 'development'
-    app_env = os.getenv("APP_ENV", "development").lower()
+    app_env = os.getenv("APP_ENV", "dev").lower()
     
     # Map 'dev' and 'prod' to full names if needed
     if app_env == "dev":
