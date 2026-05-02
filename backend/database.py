@@ -37,14 +37,18 @@ def create_resilient_engine():
         print(f"Failed to connect with {db_url}: {error_msg}")
         
         if "unix_socket" in db_url:
+            from urllib.parse import quote_plus
             db_user = os.getenv("MYSQL_USER", "root")
             db_pass = os.getenv("MYSQL_PASSWORD", "")
             db_host = os.getenv("MYSQL_HOST", "localhost")
             db_port = os.getenv("MYSQL_PORT", "3306")
             db_name = os.getenv("MYSQL_DATABASE", "soop_mail_admin")
-            fallback_url = f"mysql+pymysql://{db_user}:{db_pass}@{db_host}:{db_port}/{db_name}"
+            
+            encoded_pass = quote_plus(db_pass)
+            fallback_url = f"mysql+pymysql://{db_user}:{encoded_pass}@{db_host}:{db_port}/{db_name}"
             
             try:
+                print(f"Socket falló. Intentando fallback a TCP...")
                 engine = create_engine(fallback_url, pool_pre_ping=True)
                 with engine.connect() as conn:
                     log_connection_attempt(fallback_url, True)
