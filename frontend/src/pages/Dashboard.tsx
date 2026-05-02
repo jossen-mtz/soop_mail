@@ -78,6 +78,12 @@ const Dashboard: React.FC = () => {
   
   const [settingsTab, setSettingsTab] = useState<'profile' | 'server' | 'users' | 'logs'>('profile');
   const [systemStatus, setSystemStatus] = useState<any>(null);
+  const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
+  const [deleteConfig, setDeleteConfig] = useState<{
+    title: string;
+    message: string;
+    onConfirm: () => void;
+  } | null>(null);
 
   const fetchMailUsers = async () => {
     try {
@@ -183,16 +189,25 @@ const Dashboard: React.FC = () => {
     }
   };
 
-  const handleDeleteUser = async (email: string) => {
-    if (!window.confirm(`¿Estás seguro de eliminar el usuario ${email}?`)) return;
-    
-    try {
-      await api.delete(`/api/mail/users/${email}`);
-      showNotification('Usuario eliminado', 'success');
-      fetchMailUsers();
-    } catch (err) {
-      showNotification('Error al eliminar usuario', 'error');
-    }
+  const handleDeleteUser = (email: string) => {
+    setDeleteConfig({
+      title: 'Eliminar Usuario de Correo',
+      message: `¿Estás seguro de eliminar el usuario ${email}? Esta acción no se puede deshacer.`,
+      onConfirm: async () => {
+        setActionLoading(true);
+        try {
+          await api.delete(`/api/mail/users/${email}`);
+          showNotification('Usuario eliminado', 'success');
+          fetchMailUsers();
+        } catch (err) {
+          showNotification('Error al eliminar usuario', 'error');
+        } finally {
+          setActionLoading(false);
+          setShowDeleteConfirm(false);
+        }
+      }
+    });
+    setShowDeleteConfirm(true);
   };
 
   const handleCreateSystemUser = async (e: React.FormEvent) => {
@@ -218,20 +233,29 @@ const Dashboard: React.FC = () => {
     }
   };
 
-  const handleDeleteSystemUser = async (id: number, username: string) => {
+  const handleDeleteSystemUser = (id: number, username: string) => {
     if (id === user?.id) {
       showNotification('No puedes eliminar tu propia cuenta', 'error');
       return;
     }
-    if (!window.confirm(`¿Estás seguro de eliminar el acceso de ${username}?`)) return;
-    
-    try {
-      await api.delete(`/api/system/users/${id}`);
-      showNotification('Usuario eliminado', 'success');
-      fetchSystemUsers();
-    } catch (err) {
-      showNotification('Error al eliminar usuario', 'error');
-    }
+    setDeleteConfig({
+      title: 'Eliminar Acceso al Sistema',
+      message: `¿Estás seguro de eliminar el acceso de ${username}?`,
+      onConfirm: async () => {
+        setActionLoading(true);
+        try {
+          await api.delete(`/api/system/users/${id}`);
+          showNotification('Usuario eliminado', 'success');
+          fetchSystemUsers();
+        } catch (err) {
+          showNotification('Error al eliminar usuario', 'error');
+        } finally {
+          setActionLoading(false);
+          setShowDeleteConfirm(false);
+        }
+      }
+    });
+    setShowDeleteConfirm(true);
   };
 
   const handleChangePassword = async (e: React.FormEvent) => {
@@ -1528,6 +1552,65 @@ const Dashboard: React.FC = () => {
                 </button>
               </div>
             </form>
+          </motion.div>
+        </div>
+      )}
+
+      {/* Delete Confirmation Modal */}
+      {showDeleteConfirm && deleteConfig && (
+        <div style={{ 
+          position: 'fixed', 
+          inset: 0, 
+          background: 'rgba(15, 23, 42, 0.4)', 
+          backdropFilter: 'blur(8px)',
+          display: 'flex', 
+          alignItems: 'center', 
+          justifyContent: 'center',
+          zIndex: 1000
+        }}>
+          <motion.div 
+            initial={{ scale: 0.9, opacity: 0, y: 20 }}
+            animate={{ scale: 1, opacity: 1, y: 0 }}
+            className="card" 
+            style={{ width: '100%', maxWidth: '400px', padding: '2rem', border: 'none', boxShadow: '0 25px 50px -12px rgba(0, 0, 0, 0.25)', textAlign: 'center' }}
+          >
+            <div style={{ 
+              background: '#fee2e2', 
+              width: '64px', 
+              height: '64px', 
+              borderRadius: '50%', 
+              display: 'flex', 
+              alignItems: 'center', 
+              justifyContent: 'center', 
+              margin: '0 auto 1.5rem',
+              color: '#ef4444'
+            }}>
+              <Trash2 size={32} />
+            </div>
+            <h2 style={{ fontSize: '1.25rem', fontWeight: '800', marginBottom: '0.75rem', color: '#1e293b' }}>{deleteConfig.title}</h2>
+            <p style={{ color: '#64748b', fontSize: '0.938rem', marginBottom: '2rem', lineHeight: '1.5' }}>
+              {deleteConfig.message}
+            </p>
+            
+            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '1rem' }}>
+              <button 
+                type="button" 
+                onClick={() => setShowDeleteConfirm(false)} 
+                className="btn btn-secondary"
+                style={{ width: '100%' }}
+              >
+                Cancelar
+              </button>
+              <button 
+                type="button" 
+                onClick={deleteConfig.onConfirm} 
+                className="btn btn-primary"
+                style={{ width: '100%', background: '#ef4444', borderColor: '#ef4444' }}
+                disabled={actionLoading}
+              >
+                {actionLoading ? 'Eliminando...' : 'Eliminar'}
+              </button>
+            </div>
           </motion.div>
         </div>
       )}

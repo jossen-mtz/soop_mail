@@ -102,40 +102,57 @@ def get_mailbox_stats(mail_dir: str):
     if not mail_dir:
         return 0, 0, "0 B", ""
         
-    actual_path = mail_dir
-    if not os.path.exists(actual_path):
-        parts = mail_dir.strip('/').split('/')
-        if len(parts) >= 2:
-            domain = parts[-2]
-            username = parts[-1]
-            alt_path = os.path.join(MAIL_BASE, domain, username)
-            if os.path.exists(alt_path):
-                actual_path = alt_path
-            else:
-                alt_path2 = os.path.join(MAIL_BASE, username)
-                if os.path.exists(alt_path2):
-                    actual_path = alt_path2
+    # Try multiple possible locations for this mailbox
+    possible_paths = [
+        mail_dir,
+        os.path.join(MAIL_BASE, os.path.basename(os.path.dirname(mail_dir)), os.path.basename(mail_dir)) if '/' in mail_dir else "",
+        os.path.join('/var/mail/soop_mail', os.path.basename(os.path.dirname(mail_dir)), os.path.basename(mail_dir)) if '/' in mail_dir else "",
+        os.path.join('/var/mail/vhosts', os.path.basename(os.path.dirname(mail_dir)), os.path.basename(mail_dir)) if '/' in mail_dir else ""
+    ]
+    
+    actual_path = ""
+    for p in possible_paths:
+        if p and os.path.exists(p):
+            actual_path = p
+            break
+            
+    if not actual_path:
+        # One last try: if it's just a username or ends with username
+        username = os.path.basename(mail_dir)
+        # Try to find it in MAIL_BASE/DEFAULT_DOMAIN/username
+        p = os.path.join(MAIL_BASE, DEFAULT_DOMAIN, username)
+        if os.path.exists(p):
+            actual_path = p
 
-    if not os.path.exists(actual_path):
+    print(f"DEBUG: Counting emails for {mail_dir} -> Resolved to: {actual_path}")
+    if not actual_path:
         return 0, 0, "0 B", mail_dir
         
     total = 0
     new = 0
     size_bytes = 0
+    
+    # Exclude list for non-email files
+    exclude = ['dovecot', 'subscriptions', 'maildirfolder', 'maildirsize']
+    
     try:
         for root, dirs, files in os.walk(actual_path):
+            # Check if we are inside a 'new' folder for Maildir
             is_new_dir = os.path.basename(root) == 'new'
             for file in files:
+                # Basic filter to exclude Dovecot metadata, but include everything else
+                if any(file.startswith(ex) for ex in exclude):
+                    continue
+                    
                 fp = os.path.join(root, file)
-                if not file.startswith('dovecot') and file != 'subscriptions' and file != 'maildirfolder' and not file.startswith('.'):
-                    total += 1
-                    if is_new_dir:
-                        new += 1
-                    try:
-                        if not os.path.islink(fp):
-                            size_bytes += os.path.getsize(fp)
-                    except:
-                        pass
+                total += 1
+                if is_new_dir:
+                    new += 1
+                try:
+                    if not os.path.islink(fp):
+                        size_bytes += os.path.getsize(fp)
+                except:
+                    pass
     except Exception as e:
         print(f"Error getting mailbox stats in {actual_path}: {str(e)}")
         
@@ -630,7 +647,12 @@ async def get_system_status(current_user: models.User = Depends(auth.get_current
         
     success_db, message_db = check_db_connection()
     users = read_users_file()
-    total_emails = sum(count_emails(u['home']) for u in users)
+    total_emails = 0
+    total_new = 0
+    for u in users:
+        t, n, _, _ = get_mailbox_stats(u['home'])
+        total_emails += t
+        total_new += n
     mail_base_size = get_dir_size(MAIL_BASE)
         
     details = {
@@ -643,6 +665,7 @@ async def get_system_status(current_user: models.User = Depends(auth.get_current
         "users_file": USERS_FILE,
         "current_time": datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
         "total_emails": total_emails,
+        "total_new_emails": total_new,
         "mail_base_size": format_size(mail_base_size),
         "postfix_active": postfix_active,
         "dovecot_active": dovecot_active,
