@@ -56,6 +56,7 @@ const Dashboard: React.FC = () => {
     status: 'active',
     restart_soop_mail: true 
   });
+  const [showAddAliasModal, setShowAddAliasModal] = useState(false);
   const [newAlias, setNewAlias] = useState({ email: '', destinations: '', is_dynamic: false });
   const [newForwarding, setNewForwarding] = useState({ email: '', target: '' });
   const [showAddForwardingModal, setShowAddForwardingModal] = useState(false);
@@ -229,8 +230,6 @@ const Dashboard: React.FC = () => {
     setShowDeleteConfirm(true);
   };
 
-  const [showAddForwardingModal, setShowAddForwardingModal] = useState(false);
-  const [newForwarding, setNewForwarding] = useState({ email: '', target: '' });
 
   const handleCreateForwardingRule = async (e: React.FormEvent) => {
     e.preventDefault();
