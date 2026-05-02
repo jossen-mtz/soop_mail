@@ -1550,7 +1550,7 @@ const Dashboard: React.FC = () => {
                             <div>
                               <p style={{ fontSize: '0.75rem', fontWeight: '600', color: '#92400e', marginBottom: '0.25rem' }}>Problema de Permisos Detectado</p>
                               <p style={{ fontSize: '0.7rem', color: '#b45309' }}>
-                                El directorio de configuración no es escribible. Ejecuta: <code style={{ background: '#fef3c7', padding: '1px 3px' }}>sudo chown -R $USER /etc/soop-mail</code> en el servidor.
+                                El backend no tiene permisos para escribir el archivo de metadatos. Verifica los permisos de la carpeta del proyecto.
                               </p>
                             </div>
                           </div>

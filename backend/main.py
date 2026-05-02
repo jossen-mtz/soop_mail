@@ -91,7 +91,11 @@ USERS_FILE = os.environ.get('SOOP_MAIL_USERS_FILE', os.environ.get('USERS_FILE',
 print(f"DEBUG: USERS_FILE path: {USERS_FILE} (exists: {os.path.exists(USERS_FILE)})")
 POSTFIX_VIRTUAL = os.environ.get('POSTFIX_VIRTUAL', '/etc/postfix/virtual')
 POSTFIX_VMAILBOX = os.environ.get('POSTFIX_VMAILBOX', '/etc/postfix/vmailbox')
-ALIAS_META_FILE = os.environ.get('ALIAS_META_FILE', '/etc/soop-mail/aliases_meta.json')
+
+# Move metadata file to local directory instead of /etc/
+BASE_DIR = os.path.dirname(os.path.abspath(__file__))
+ALIAS_META_FILE = os.environ.get('ALIAS_META_FILE', os.path.join(BASE_DIR, 'aliases_meta.json'))
+
 SENDER_BCC_FILE = os.environ.get('SENDER_BCC_FILE', '/etc/postfix/sender_bcc')
 POSTFIX_SENDER_RESTRICTIONS = os.environ.get('POSTFIX_SENDER_RESTRICTIONS', '/etc/postfix/sender_restrictions')
 MAIL_BASE = os.environ.get('SOOP_MAIL_BASE', os.environ.get('MAIL_BASE', '/var/mail/vhosts'))
