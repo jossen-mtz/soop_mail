@@ -19,7 +19,8 @@ import {
   Server,
   Shield,
   Activity,
-  Database
+  Database,
+  Edit2
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
 
@@ -38,6 +39,11 @@ const Dashboard: React.FC = () => {
   const [loading, setLoading] = useState(true);
   const [searchTerm, setSearchTerm] = useState('');
   const [showAddModal, setShowAddModal] = useState(false);
+  const [showViewModal, setShowViewModal] = useState(false);
+  const [showEditModal, setShowEditModal] = useState(false);
+  const [selectedMailUser, setSelectedMailUser] = useState<MailUser | null>(null);
+  const [editPassword, setEditPassword] = useState({ password: '', password_confirm: '' });
+  
   const [newUser, setNewUser] = useState({
     email: '',
     password: '',
@@ -126,6 +132,25 @@ const Dashboard: React.FC = () => {
   const showNotification = (message: string, type: 'success' | 'error') => {
     setNotification({ message, type });
     setTimeout(() => setNotification(null), 5000);
+  };
+
+  const handleUpdateMailUserPassword = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!selectedMailUser) return;
+    setActionLoading(true);
+    try {
+      await api.put(`/api/mail/users/${selectedMailUser.email}/password`, {
+        ...editPassword,
+        restart_soop_mail: true
+      });
+      showNotification('Contraseña actualizada exitosamente', 'success');
+      setShowEditModal(false);
+      setEditPassword({ password: '', password_confirm: '' });
+    } catch (err: any) {
+      showNotification(err.response?.data?.detail || 'Error al actualizar contraseña', 'error');
+    } finally {
+      setActionLoading(false);
+    }
   };
 
   const handleCreateUser = async (e: React.FormEvent) => {
@@ -390,8 +415,6 @@ const Dashboard: React.FC = () => {
                     <tr>
                       <th>USUARIO / EMAIL</th>
                       <th>CORREOS</th>
-                      <th>ID / GRUPO</th>
-                      <th>DIRECTORIO HOME</th>
                       <th style={{ textAlign: 'right' }}>ACCIONES</th>
                     </tr>
                   </thead>
@@ -407,24 +430,47 @@ const Dashboard: React.FC = () => {
                         <td style={{ fontWeight: '600', color: '#1e293b' }}>{u.email}</td>
                         <td>
                           <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
-                            <Mail size={14} style={{ color: '#4f46e5' }} />
-                            <span style={{ fontWeight: '700', color: '#1e293b' }}>{u.email_count}</span>
+                            <div style={{ 
+                              background: '#f0f9ff', 
+                              padding: '0.25rem 0.75rem', 
+                              borderRadius: '2rem', 
+                              display: 'flex', 
+                              alignItems: 'center', 
+                              gap: '0.375rem',
+                              border: '1px solid #e0f2fe'
+                            }}>
+                              <Mail size={14} style={{ color: '#0ea5e9' }} />
+                              <span style={{ fontWeight: '700', color: '#0369a1', fontSize: '0.813rem' }}>{u.email_count}</span>
+                            </div>
                           </div>
                         </td>
-                        <td>
-                          <span className="badge badge-primary">{u.uid}:{u.gid}</span>
-                        </td>
-                        <td>
-                          <code style={{ fontSize: '0.75rem', background: '#f1f5f9', padding: '0.25rem 0.5rem', borderRadius: '0.375rem', color: '#475569', border: '1px solid #e2e8f0' }}>{u.home}</code>
-                        </td>
                         <td style={{ textAlign: 'right' }}>
-                          <button 
-                            onClick={() => handleDeleteUser(u.email)} 
-                            className="btn btn-secondary" 
-                            style={{ color: '#ef4444', padding: '0.5rem', border: 'none', background: 'transparent', boxShadow: 'none' }}
-                          >
-                            <Trash2 size={18} />
-                          </button>
+                          <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '0.25rem' }}>
+                            <button 
+                              onClick={() => { setSelectedMailUser(u); setShowViewModal(true); }}
+                              className="btn btn-secondary" 
+                              style={{ color: '#6366f1', padding: '0.5rem', border: 'none', background: 'transparent', boxShadow: 'none' }}
+                              title="Ver detalles"
+                            >
+                              <Eye size={18} />
+                            </button>
+                            <button 
+                              onClick={() => { setSelectedMailUser(u); setEditPassword({ password: '', password_confirm: '' }); setShowEditModal(true); }}
+                              className="btn btn-secondary" 
+                              style={{ color: '#f59e0b', padding: '0.5rem', border: 'none', background: 'transparent', boxShadow: 'none' }}
+                              title="Editar contraseña"
+                            >
+                              <Edit2 size={18} />
+                            </button>
+                            <button 
+                              onClick={() => handleDeleteUser(u.email)} 
+                              className="btn btn-secondary" 
+                              style={{ color: '#ef4444', padding: '0.5rem', border: 'none', background: 'transparent', boxShadow: 'none' }}
+                              title="Eliminar usuario"
+                            >
+                              <Trash2 size={18} />
+                            </button>
+                          </div>
                         </td>
                       </tr>
                     ))}
@@ -1280,6 +1326,174 @@ const Dashboard: React.FC = () => {
                 <button type="button" onClick={() => setShowAddSystemUserModal(false)} className="btn btn-secondary">Cancelar</button>
                 <button type="submit" className="btn btn-primary" disabled={actionLoading}>
                   {actionLoading ? 'Creando...' : 'Crear Usuario'}
+                </button>
+              </div>
+            </form>
+          </motion.div>
+        </div>
+      )}
+      {/* View User Modal */}
+      {showViewModal && selectedMailUser && (
+        <div style={{ 
+          position: 'fixed', 
+          inset: 0, 
+          background: 'rgba(15, 23, 42, 0.4)', 
+          backdropFilter: 'blur(8px)',
+          display: 'flex', 
+          alignItems: 'center', 
+          justifyContent: 'center',
+          zIndex: 100
+        }}>
+          <motion.div 
+            initial={{ scale: 0.9, opacity: 0, y: 20 }}
+            animate={{ scale: 1, opacity: 1, y: 0 }}
+            className="card" 
+            style={{ width: '100%', maxWidth: '540px', padding: '2.5rem', border: 'none', boxShadow: '0 25px 50px -12px rgba(0, 0, 0, 0.25)' }}
+          >
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: '2rem' }}>
+              <div>
+                <h2 style={{ fontSize: '1.5rem', fontWeight: '800', marginBottom: '0.5rem', color: '#1e293b' }}>Detalles del Buzón</h2>
+                <p style={{ color: '#64748b', fontSize: '0.875rem' }}>Información técnica de la cuenta de correo.</p>
+              </div>
+              <div style={{ 
+                background: '#f0f9ff', 
+                padding: '0.5rem 1rem', 
+                borderRadius: '2rem', 
+                display: 'flex', 
+                alignItems: 'center', 
+                gap: '0.5rem',
+                border: '1px solid #e0f2fe'
+              }}>
+                <Mail size={16} style={{ color: '#0ea5e9' }} />
+                <span style={{ fontWeight: '800', color: '#0369a1' }}>{selectedMailUser.email_count} correos</span>
+              </div>
+            </div>
+
+            <div style={{ display: 'flex', flexDirection: 'column', gap: '1.5rem' }}>
+              <div className="input-group">
+                <label>Dirección de Correo</label>
+                <div style={{ fontWeight: '700', color: '#1e293b', fontSize: '1.125rem', padding: '0.75rem 1rem', background: '#f8fafc', borderRadius: '0.75rem', border: '1px solid #e2e8f0' }}>
+                  {selectedMailUser.email}
+                </div>
+              </div>
+              
+              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '1rem' }}>
+                <div className="input-group">
+                  <label>UID / GID</label>
+                  <div style={{ fontWeight: '600', color: '#475569', padding: '0.75rem 1rem', background: '#f8fafc', borderRadius: '0.75rem', border: '1px solid #e2e8f0' }}>
+                    {selectedMailUser.uid}:{selectedMailUser.gid}
+                  </div>
+                </div>
+                <div className="input-group">
+                  <label>Cuota de Disco</label>
+                  <div style={{ fontWeight: '600', color: '#475569', padding: '0.75rem 1rem', background: '#f8fafc', borderRadius: '0.75rem', border: '1px solid #e2e8f0' }}>
+                    Ilimitado
+                  </div>
+                </div>
+              </div>
+
+              <div className="input-group">
+                <label>Ruta de Almacenamiento (Home)</label>
+                <code style={{ 
+                  display: 'block',
+                  padding: '1rem', 
+                  background: '#1e293b', 
+                  color: '#e2e8f0', 
+                  borderRadius: '0.75rem',
+                  fontSize: '0.813rem',
+                  wordBreak: 'break-all',
+                  fontFamily: 'JetBrains Mono, monospace'
+                }}>
+                  {selectedMailUser.home}
+                </code>
+              </div>
+            </div>
+            
+            <div style={{ display: 'flex', marginTop: '2.5rem' }}>
+              <button onClick={() => setShowViewModal(false)} className="btn btn-secondary" style={{ width: '100%' }}>Cerrar</button>
+            </div>
+          </motion.div>
+        </div>
+      )}
+
+      {/* Edit User Modal */}
+      {showEditModal && selectedMailUser && (
+        <div style={{ 
+          position: 'fixed', 
+          inset: 0, 
+          background: 'rgba(15, 23, 42, 0.4)', 
+          backdropFilter: 'blur(8px)',
+          display: 'flex', 
+          alignItems: 'center', 
+          justifyContent: 'center',
+          zIndex: 100
+        }}>
+          <motion.div 
+            initial={{ scale: 0.9, opacity: 0, y: 20 }}
+            animate={{ scale: 1, opacity: 1, y: 0 }}
+            className="card" 
+            style={{ width: '100%', maxWidth: '480px', padding: '2.5rem', border: 'none', boxShadow: '0 25px 50px -12px rgba(0, 0, 0, 0.25)' }}
+          >
+            <h2 style={{ fontSize: '1.5rem', fontWeight: '800', marginBottom: '0.5rem', color: '#1e293b' }}>Editar Contraseña</h2>
+            <p style={{ color: '#64748b', fontSize: '0.875rem', marginBottom: '2rem' }}>
+              Cambiar la contraseña para <strong>{selectedMailUser.email}</strong>.
+            </p>
+            
+            <form onSubmit={handleUpdateMailUserPassword}>
+              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '1rem' }}>
+                <div className="input-group">
+                  <label>Nueva Contraseña</label>
+                  <div style={{ position: 'relative' }}>
+                    <input 
+                      type={showPassword ? "text" : "password"} 
+                      className="input-control" 
+                      placeholder="••••••••"
+                      value={editPassword.password}
+                      onChange={e => setEditPassword({...editPassword, password: e.target.value})}
+                      required
+                    />
+                    <button 
+                      type="button"
+                      onClick={() => setShowPassword(!showPassword)}
+                      style={{ 
+                        position: 'absolute', 
+                        right: '0.75rem', 
+                        top: '50%', 
+                        transform: 'translateY(-50%)',
+                        background: 'none',
+                        border: 'none',
+                        color: '#94a3b8',
+                        cursor: 'pointer',
+                        display: 'flex',
+                        padding: '0.5rem'
+                      }}
+                    >
+                      {showPassword ? <EyeOff size={18} /> : <Eye size={18} />}
+                    </button>
+                  </div>
+                </div>
+                <div className="input-group">
+                  <label>Confirmar</label>
+                  <input 
+                    type={showPassword ? "text" : "password"} 
+                    className="input-control" 
+                    placeholder="••••••••"
+                    value={editPassword.password_confirm}
+                    onChange={e => setEditPassword({...editPassword, password_confirm: e.target.value})}
+                    required
+                  />
+                </div>
+              </div>
+
+              <div style={{ fontSize: '0.75rem', color: '#64748b', padding: '1rem', background: '#f8fafc', borderRadius: '0.75rem', marginBottom: '2rem', display: 'flex', gap: '0.5rem' }}>
+                <RefreshCcw size={14} />
+                <span>Los servicios se reiniciarán automáticamente al actualizar.</span>
+              </div>
+              
+              <div style={{ display: 'flex', gap: '1rem', justifyContent: 'flex-end' }}>
+                <button type="button" onClick={() => setShowEditModal(false)} className="btn btn-secondary">Cancelar</button>
+                <button type="submit" className="btn btn-primary" disabled={actionLoading}>
+                  {actionLoading ? 'Actualizando...' : 'Actualizar'}
                 </button>
               </div>
             </form>

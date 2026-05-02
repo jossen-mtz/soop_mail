@@ -102,20 +102,16 @@ def count_emails(mail_dir: str):
         return 0
     count = 0
     
-    # Try direct subdirs and nested Maildir subdir
-    possible_paths = [mail_dir]
-    if os.path.exists(os.path.join(mail_dir, 'Maildir')):
-        possible_paths.append(os.path.join(mail_dir, 'Maildir'))
+    try:
+        # Mimic the user's find command: 
+        # find "$dir" -type f ! -name "dovecot*" ! -name "subscriptions"
+        for root, dirs, files in os.walk(mail_dir):
+            for file in files:
+                if not file.startswith('dovecot') and file != 'subscriptions' and file != 'maildirfolder':
+                    count += 1
+    except Exception as e:
+        print(f"Error counting emails in {mail_dir}: {str(e)}")
         
-    for base in possible_paths:
-        # Standard Maildir structure: cur, new, tmp
-        for subdir in ['cur', 'new']:
-            path = os.path.join(base, subdir)
-            if os.path.exists(path) and os.path.isdir(path):
-                try:
-                    count += len([f for f in os.listdir(path) if os.path.isfile(os.path.join(path, f))])
-                except Exception:
-                    pass
     return count
 
 def get_dir_size(path):
@@ -471,6 +467,43 @@ async def update_mail_user(
         
     write_users_file(users)
     log_audit(db, current_user.id, "UPDATE_MAIL_USER", "MailUser", email, f"Updated password for {email}", request=request)
+    
+    if user_data.restart_soop_mail:
+        try:
+            subprocess.run(['systemctl', 'restart', 'soop-mail'], check=True)
+        except:
+            pass
+            
+    return {"message": "Password updated successfully"}
+
+@app.put("/api/mail/users/{email}/password")
+async def update_mail_user_password(
+    email: str,
+    user_data: schemas.SoopMailUserUpdate,
+    request: Request,
+    db: Session = Depends(get_db),
+    current_user: models.User = Depends(auth.get_current_active_user)
+):
+    if user_data.password != user_data.password_confirm:
+        raise HTTPException(status_code=400, detail="Passwords do not match")
+        
+    users = read_users_file()
+    user_index = -1
+    for i, u in enumerate(users):
+        if u['email'] == email:
+            user_index = i
+            break
+            
+    if user_index == -1:
+        raise HTTPException(status_code=404, detail="User not found")
+        
+    # Update hash
+    users[user_index]['hash'] = generate_soop_mail_hash(user_data.password)
+    
+    # Write back
+    write_users_file(users)
+    
+    log_audit(db, current_user.id, "UPDATE_MAIL_USER_PASSWORD", "MailUser", email, f"Updated password for mail user {email}", request=request)
     
     if user_data.restart_soop_mail:
         try:
