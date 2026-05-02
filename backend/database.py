@@ -4,14 +4,33 @@ from sqlalchemy.ext.declarative import declarative_base
 from sqlalchemy.orm import sessionmaker
 import config
 
-# MySQL URL: mysql+pymysql://user:password@host:port/dbname
-SQLALCHEMY_DATABASE_URL = config.DATABASE_URL
+def create_resilient_engine():
+    """Tries to create an engine, falling back between Socket and TCP if necessary."""
+    db_url = config.DATABASE_URL
+    
+    # If the default URL fails, we can try to force a different strategy here
+    # But usually config.py has already chosen the 'best' one based on file existence
+    try:
+        engine = create_engine(db_url, pool_pre_ping=True)
+        # Test connection
+        with engine.connect() as conn:
+            pass
+        return engine
+    except Exception as e:
+        print(f"Failed to connect with {db_url}: {e}")
+        # If it was a socket attempt, try TCP as fallback
+        if "unix_socket" in db_url:
+            db_user = os.getenv("MYSQL_USER", "root")
+            db_pass = os.getenv("MYSQL_PASSWORD", "")
+            db_host = os.getenv("MYSQL_HOST", "localhost")
+            db_port = os.getenv("MYSQL_PORT", "3306")
+            db_name = os.getenv("MYSQL_DATABASE", "soop_mail_admin")
+            fallback_url = f"mysql+pymysql://{db_user}:{db_pass}@{db_host}:{db_port}/{db_name}"
+            print(f"Attempting fallback to TCP: {fallback_url}")
+            return create_engine(fallback_url, pool_pre_ping=True)
+        raise e
 
-engine = create_engine(
-    SQLALCHEMY_DATABASE_URL,
-    # pool_pre_ping is useful for MySQL to handle disconnected sessions
-    pool_pre_ping=True
-)
+engine = create_resilient_engine()
 SessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=engine)
 
 Base = declarative_base()

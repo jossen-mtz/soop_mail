@@ -15,12 +15,20 @@ from tempfile import NamedTemporaryFile
 
 import config
 import models, schemas, auth, database
-from database import engine, get_db
+from database import engine, get_db, check_db_connection
 
 # Create database tables
 models.Base.metadata.create_all(bind=engine)
 
 app = FastAPI(title="soop MAIL API")
+
+@app.on_event("startup")
+def startup_db_check():
+    success, message = check_db_connection()
+    if not success:
+        print(f"CRITICAL: Database connection failed: {message}")
+    else:
+        print(f"SUCCESS: {message}")
 
 # CORS configuration
 app.add_middleware(
@@ -439,6 +447,7 @@ async def get_system_status(current_user: models.User = Depends(auth.get_current
         service_active = False
         postfix_config_error = str(e)
         
+    success_db, message_db = check_db_connection()
     users = read_users_file()
     total_emails = sum(count_emails(u['home']) for u in users)
     mail_base_size = get_dir_size(MAIL_BASE)
@@ -459,7 +468,9 @@ async def get_system_status(current_user: models.User = Depends(auth.get_current
         "postfix_config_ok": postfix_config_ok,
         "postfix_config_error": postfix_config_error,
         "dovecot_config_ok": dovecot_config_ok,
-        "dovecot_config_error": dovecot_config_error
+        "dovecot_config_error": dovecot_config_error,
+        "db_connected": success_db,
+        "db_message": message_db
     }
     
     if os.name != 'nt':
@@ -482,6 +493,15 @@ async def get_system_status(current_user: models.User = Depends(auth.get_current
         "status": "online",
         "service_active": service_active,
         "details": details
+    }
+
+@app.get("/api/system/db-status")
+def get_db_status(current_user: models.User = Depends(auth.get_current_admin_user)):
+    success, message = check_db_connection()
+    return {
+        "connected": success,
+        "message": message,
+        "timestamp": datetime.now()
     }
 
 # Serve Frontend

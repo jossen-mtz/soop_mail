@@ -720,6 +720,43 @@ const Dashboard: React.FC = () => {
                           </div>
                         </div>
                       </div>
+
+                      <div className="card" style={{ padding: '1.5rem', display: 'flex', flexDirection: 'column', gap: '1rem' }}>
+                        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                          <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem' }}>
+                            <div style={{ 
+                              background: systemStatus?.details?.db_connected ? '#dcfce7' : '#fee2e2', 
+                              color: systemStatus?.details?.db_connected ? '#16a34a' : '#dc2626', 
+                              width: '36px',
+                              height: '36px',
+                              display: 'flex',
+                              alignItems: 'center',
+                              justifyContent: 'center',
+                              borderRadius: '0.75rem' 
+                            }}>
+                              <Database size={20} />
+                            </div>
+                            <div>
+                              <div style={{ fontSize: '0.75rem', color: '#64748b', fontWeight: '500' }}>Base de Datos MySQL</div>
+                              <div style={{ fontSize: '1rem', fontWeight: '700', color: '#1e293b' }}>
+                                {systemStatus?.details?.db_connected ? 'Conectado' : 'Desconectado'}
+                              </div>
+                            </div>
+                          </div>
+                          <div style={{ 
+                            width: '12px', 
+                            height: '12px', 
+                            borderRadius: '50%', 
+                            background: systemStatus?.details?.db_connected ? '#22c55e' : '#ef4444',
+                            boxShadow: `0 0 10px ${systemStatus?.details?.db_connected ? '#22c55e' : '#ef4444'}80`
+                          }}></div>
+                        </div>
+                        <div style={{ borderTop: '1px solid #f1f5f9', paddingTop: '1rem' }}>
+                          <div style={{ fontSize: '0.813rem', color: systemStatus?.details?.db_connected ? '#166534' : '#dc2626', fontWeight: '600' }}>
+                            {systemStatus?.details?.db_message}
+                          </div>
+                        </div>
+                      </div>
                     </div>
 
                     <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '1.5rem' }}>
