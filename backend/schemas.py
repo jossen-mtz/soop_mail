@@ -29,6 +29,16 @@ class UserCreate(UserBase):
             raise ValueError("La contraseña debe tener al menos 8 caracteres")
         return v
 
+class UserRegister(UserCreate):
+    password_confirm: str
+
+    @field_validator("password_confirm")
+    @classmethod
+    def passwords_match(cls, v: str, info: ValidationInfo) -> str:
+        if "password" in info.data and v != info.data["password"]:
+            raise ValueError("Las contraseñas no coinciden")
+        return v
+
 class UserUpdate(BaseModel):
     email: Optional[EmailStr] = None
     full_name: Optional[str] = None

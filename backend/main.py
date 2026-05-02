@@ -188,6 +188,37 @@ async def login(request: Request, db: Session = Depends(get_db)):
     
     return {"access_token": access_token, "token_type": "bearer"}
 
+@app.post("/api/auth/register", response_model=schemas.UserOut)
+async def register_user(
+    user_data: schemas.UserRegister,
+    request: Request,
+    db: Session = Depends(get_db)
+):
+    # Check if username or email already exists
+    if db.query(models.User).filter(models.User.username == user_data.username).first():
+        raise HTTPException(status_code=400, detail="El nombre de usuario ya está registrado")
+    if db.query(models.User).filter(models.User.email == user_data.email).first():
+        raise HTTPException(status_code=400, detail="El correo electrónico ya está registrado")
+    
+    # First user registered is always admin
+    is_first_user = db.query(models.User).count() == 0
+    
+    new_user = models.User(
+        username=user_data.username,
+        email=user_data.email,
+        full_name=user_data.full_name,
+        is_admin=is_first_user or user_data.is_admin,
+        is_active=True,
+        password_hash=auth.get_password_hash(user_data.password)
+    )
+    db.add(new_user)
+    db.commit()
+    db.refresh(new_user)
+    
+    log_audit(db, new_user.id, "REGISTER", "User", str(new_user.id), f"Usuario registrado: {new_user.username}", request=request)
+    
+    return new_user
+
 @app.get("/api/auth/me", response_model=schemas.UserOut)
 async def read_users_me(current_user: models.User = Depends(auth.get_current_active_user)):
     return current_user

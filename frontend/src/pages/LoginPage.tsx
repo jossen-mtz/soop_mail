@@ -172,8 +172,27 @@ const LoginPage: React.FC = () => {
           </button>
         </form>
 
-        <div style={{ marginTop: '2.5rem', textAlign: 'center', fontSize: '0.813rem', color: '#94a3b8' }}>
-          &copy; 2026 soop Group. Todos los derechos reservados.
+        <div style={{ marginTop: '2.5rem', textAlign: 'center' }}>
+          <p style={{ color: '#64748b', fontSize: '0.875rem', marginBottom: '1.5rem' }}>
+            ¿No tienes una cuenta?{' '}
+            <button 
+              onClick={() => navigate('/register')}
+              style={{ 
+                background: 'none', 
+                border: 'none', 
+                color: '#4f46e5', 
+                fontWeight: '700', 
+                cursor: 'pointer',
+                padding: 0,
+                fontSize: '0.875rem'
+              }}
+            >
+              Registrate aquí
+            </button>
+          </p>
+          <div style={{ fontSize: '0.813rem', color: '#94a3b8' }}>
+            &copy; 2026 soop Group. Todos los derechos reservados.
+          </div>
         </div>
       </motion.div>
     </div>
