@@ -22,3 +22,14 @@ def get_db():
         yield db
     finally:
         db.close()
+
+def check_db_connection():
+    """Validates the MySQL connection and returns status/error."""
+    try:
+        # Try to connect and execute a simple query
+        with engine.connect() as connection:
+            from sqlalchemy import text
+            connection.execute(text("SELECT 1"))
+        return True, "Conexión exitosa"
+    except Exception as e:
+        return False, str(e)

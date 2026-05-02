@@ -27,4 +27,14 @@ APP_ENV = load_environment()
 
 # Export commonly used variables
 DATABASE_URL = os.getenv("DATABASE_URL")
-SECRET_KEY = os.getenv("SECRET_KEY")
+if not DATABASE_URL:
+    # Try to construct from individual MySQL variables
+    db_user = os.getenv("MYSQL_USER", "root")
+    db_pass = os.getenv("MYSQL_PASSWORD", "")
+    db_host = os.getenv("MYSQL_HOST", "localhost")
+    db_port = os.getenv("MYSQL_PORT", "3306")
+    db_name = os.getenv("MYSQL_DATABASE", "soop_mail_admin")
+    DATABASE_URL = f"mysql+pymysql://{db_user}:{db_pass}@{db_host}:{db_port}/{db_name}"
+
+SECRET_KEY = os.getenv("SECRET_KEY", "soop_mail_secret_key_2026_change_me")
+DEBUG = os.getenv("DEBUG", "False").lower() == "true"
