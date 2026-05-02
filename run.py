@@ -18,8 +18,15 @@ def run_command(command, cwd, wait=False):
 
 def main():
     import argparse
+    try:
+        from dotenv import load_dotenv
+        load_dotenv()
+    except ImportError:
+        pass
+        
+    default_env = os.getenv("APP_ENV", "dev")
     parser = argparse.ArgumentParser(description="Gestor de soop MAIL")
-    parser.add_argument("--env", choices=["dev", "prod"], default="dev", help="Ambiente de ejecución (dev o prod)")
+    parser.add_argument("--env", choices=["dev", "prod"], default=default_env, help=f"Ambiente (actual: {default_env})")
     args = parser.parse_args()
 
     os.environ["APP_ENV"] = args.env
