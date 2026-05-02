@@ -97,22 +97,48 @@ def validate_email_format(email: str):
     pattern = r'^[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}$'
     return re.match(pattern, email) is not None
 
-def count_emails(mail_dir: str):
-    if not mail_dir or not os.path.exists(mail_dir):
-        return 0
-    count = 0
-    
-    try:
-        # Mimic the user's find command: 
-        # find "$dir" -type f ! -name "dovecot*" ! -name "subscriptions"
-        for root, dirs, files in os.walk(mail_dir):
-            for file in files:
-                if not file.startswith('dovecot') and file != 'subscriptions' and file != 'maildirfolder':
-                    count += 1
-    except Exception as e:
-        print(f"Error counting emails in {mail_dir}: {str(e)}")
+def get_mailbox_stats(mail_dir: str):
+    if not mail_dir:
+        return 0, 0, "0 B", ""
         
-    return count
+    actual_path = mail_dir
+    if not os.path.exists(actual_path):
+        parts = mail_dir.strip('/').split('/')
+        if len(parts) >= 2:
+            domain = parts[-2]
+            username = parts[-1]
+            alt_path = os.path.join(MAIL_BASE, domain, username)
+            if os.path.exists(alt_path):
+                actual_path = alt_path
+            else:
+                alt_path2 = os.path.join(MAIL_BASE, username)
+                if os.path.exists(alt_path2):
+                    actual_path = alt_path2
+
+    if not os.path.exists(actual_path):
+        return 0, 0, "0 B", mail_dir
+        
+    total = 0
+    new = 0
+    size_bytes = 0
+    try:
+        for root, dirs, files in os.walk(actual_path):
+            is_new_dir = os.path.basename(root) == 'new'
+            for file in files:
+                fp = os.path.join(root, file)
+                if not file.startswith('dovecot') and file != 'subscriptions' and file != 'maildirfolder' and not file.startswith('.'):
+                    total += 1
+                    if is_new_dir:
+                        new += 1
+                    try:
+                        if not os.path.islink(fp):
+                            size_bytes += os.path.getsize(fp)
+                    except:
+                        pass
+    except Exception as e:
+        print(f"Error getting mailbox stats in {actual_path}: {str(e)}")
+        
+    return total, new, format_size(size_bytes), actual_path
 
 def get_dir_size(path):
     total_size = 0
@@ -379,15 +405,19 @@ async def delete_system_user(
 @app.get("/api/mail/users", response_model=List[schemas.SoopMailUserBase])
 async def get_mail_users(current_user: models.User = Depends(auth.get_current_active_user)):
     users = read_users_file()
-    return [
-        {
+    result = []
+    for u in users:
+        total, new, size, actual_path = get_mailbox_stats(u['home'])
+        result.append({
             "email": u['email'],
             "uid": u['uid'],
             "gid": u['gid'],
-            "home": u['home'],
-            "email_count": count_emails(u['home'])
-        } for u in users
-    ]
+            "home": actual_path,
+            "email_count": total,
+            "new_emails": new,
+            "storage_size": size
+        })
+    return result
 
 @app.post("/api/mail/users", status_code=status.HTTP_201_CREATED)
 async def create_mail_user(

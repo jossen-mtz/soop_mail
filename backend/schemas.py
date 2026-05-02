@@ -75,6 +75,8 @@ class SoopMailUserBase(BaseModel):
     gid: str
     home: str
     email_count: Optional[int] = 0
+    new_emails: Optional[int] = 0
+    storage_size: Optional[str] = "0 B"
 
 class SoopMailUserCreate(BaseModel):
     email: EmailStr

@@ -30,6 +30,8 @@ interface MailUser {
   gid: string;
   home: string;
   email_count: number;
+  new_emails: number;
+  storage_size: string;
 }
 
 const Dashboard: React.FC = () => {
@@ -250,6 +252,10 @@ const Dashboard: React.FC = () => {
     u.email.toLowerCase().includes(searchTerm.toLowerCase())
   );
 
+  const totalMailboxes = mailUsers.length;
+  const totalEmails = mailUsers.reduce((acc, curr) => acc + (curr.email_count || 0), 0);
+  const totalNewEmails = mailUsers.reduce((acc, curr) => acc + (curr.new_emails || 0), 0);
+
   return (
     <div className="dashboard-layout" style={{ display: 'flex', minHeight: '100vh', backgroundColor: '#f1f5f9' }}>
       {/* Sidebar */}
@@ -356,36 +362,46 @@ const Dashboard: React.FC = () => {
       {/* Main Content */}
       <main style={{ flex: 1, padding: '2.5rem', overflowY: 'auto' }}>
         {activeTab === 'users' ? (
-          <>
-            <header style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '2.5rem' }}>
+          <div style={{ width: '100%' }}>
+            <header style={{ marginBottom: '2.5rem', display: 'flex', justifyContent: 'space-between', alignItems: 'flex-end' }}>
               <div>
-                <h1 style={{ fontSize: '1.875rem', fontWeight: '800', color: '#1e293b', marginBottom: '0.25rem' }}>Usuarios de Correo</h1>
-                <p style={{ color: '#64748b', fontSize: '0.938rem' }}>Listado de cuentas configuradas en el servidor soop.</p>
+                <h1 style={{ fontSize: '1.875rem', fontWeight: '800', color: '#1e293b', marginBottom: '0.25rem' }}>Buzones de Correo</h1>
+                <p style={{ color: '#64748b', fontSize: '0.938rem' }}>Gestión de cuentas y monitoreo de tráfico.</p>
               </div>
-              <button onClick={() => setShowAddModal(true)} className="btn btn-primary">
-                <Plus size={18} />
+              <button onClick={() => setShowAddModal(true)} className="btn btn-primary" style={{ padding: '0.75rem 1.5rem', borderRadius: '0.875rem' }}>
+                <Plus size={20} />
                 Nuevo Usuario
               </button>
             </header>
-
-            {/* Stats Summary */}
-            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(280px, 1fr))', gap: '1.5rem', marginBottom: '2.5rem' }}>
-              <div className="card" style={{ display: 'flex', alignItems: 'center', gap: '1.25rem' }}>
-                <div style={{ 
-                  background: '#eef2ff', 
-                  color: '#4f46e5', 
-                  width: '48px',
-                  height: '48px',
-                  display: 'flex',
-                  alignItems: 'center',
-                  justifyContent: 'center',
-                  borderRadius: '1rem' 
-                }}>
+            {/* Stats Grid */}
+            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(240px, 1fr))', gap: '1.5rem', marginBottom: '2.5rem' }}>
+              <div className="card" style={{ padding: '1.5rem', display: 'flex', alignItems: 'center', gap: '1.25rem', border: 'none', background: 'linear-gradient(135deg, #4f46e5 0%, #6366f1 100%)', color: '#ffffff' }}>
+                <div style={{ background: 'rgba(255, 255, 255, 0.2)', width: '48px', height: '48px', borderRadius: '1rem', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
                   <Users size={24} />
                 </div>
                 <div>
-                  <div style={{ fontSize: '0.813rem', color: '#64748b', fontWeight: '500' }}>Cuentas Activas</div>
-                  <div style={{ fontSize: '1.5rem', fontWeight: '800', color: '#1e293b' }}>{mailUsers.length}</div>
+                  <div style={{ fontSize: '0.875rem', opacity: 0.8, fontWeight: '500' }}>Total Buzones</div>
+                  <div style={{ fontSize: '1.75rem', fontWeight: '800' }}>{totalMailboxes}</div>
+                </div>
+              </div>
+              
+              <div className="card" style={{ padding: '1.5rem', display: 'flex', alignItems: 'center', gap: '1.25rem', border: 'none', background: '#ffffff', boxShadow: '0 4px 6px -1px rgba(0, 0, 0, 0.1)' }}>
+                <div style={{ background: '#f0f9ff', width: '48px', height: '48px', borderRadius: '1rem', display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#0ea5e9' }}>
+                  <Mail size={24} />
+                </div>
+                <div>
+                  <div style={{ fontSize: '0.875rem', color: '#64748b', fontWeight: '500' }}>Total Correos</div>
+                  <div style={{ fontSize: '1.75rem', fontWeight: '800', color: '#1e293b' }}>{totalEmails.toLocaleString()}</div>
+                </div>
+              </div>
+
+              <div className="card" style={{ padding: '1.5rem', display: 'flex', alignItems: 'center', gap: '1.25rem', border: 'none', background: '#ffffff', boxShadow: '0 4px 6px -1px rgba(0, 0, 0, 0.1)' }}>
+                <div style={{ background: '#fff7ed', width: '48px', height: '48px', borderRadius: '1rem', display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#f97316' }}>
+                  <RefreshCcw size={24} />
+                </div>
+                <div>
+                  <div style={{ fontSize: '0.875rem', color: '#64748b', fontWeight: '500' }}>Correos Nuevos</div>
+                  <div style={{ fontSize: '1.75rem', fontWeight: '800', color: '#f97316' }}>{totalNewEmails}</div>
                 </div>
               </div>
             </div>
@@ -429,7 +445,7 @@ const Dashboard: React.FC = () => {
                       <tr key={u.email}>
                         <td style={{ fontWeight: '600', color: '#1e293b' }}>{u.email}</td>
                         <td>
-                          <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+                          <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem' }}>
                             <div style={{ 
                               background: '#f0f9ff', 
                               padding: '0.25rem 0.75rem', 
@@ -440,8 +456,23 @@ const Dashboard: React.FC = () => {
                               border: '1px solid #e0f2fe'
                             }}>
                               <Mail size={14} style={{ color: '#0ea5e9' }} />
-                              <span style={{ fontWeight: '700', color: '#0369a1', fontSize: '0.813rem' }}>{u.email_count}</span>
+                              <span style={{ fontWeight: '700', color: '#0369a1', fontSize: '0.813rem' }}>{u.email_count} total</span>
                             </div>
+                            
+                            {u.new_emails > 0 && (
+                              <div style={{ 
+                                background: '#fff7ed', 
+                                padding: '0.25rem 0.75rem', 
+                                borderRadius: '2rem', 
+                                display: 'flex', 
+                                alignItems: 'center', 
+                                gap: '0.375rem',
+                                border: '1px solid #ffedd5'
+                              }}>
+                                <span style={{ width: '6px', height: '6px', borderRadius: '50%', background: '#f97316' }}></span>
+                                <span style={{ fontWeight: '700', color: '#9a3412', fontSize: '0.813rem' }}>{u.new_emails} nuevos</span>
+                              </div>
+                            )}
                           </div>
                         </td>
                         <td style={{ textAlign: 'right' }}>
@@ -1379,9 +1410,9 @@ const Dashboard: React.FC = () => {
               
               <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '1rem' }}>
                 <div className="input-group">
-                  <label>UID / GID</label>
-                  <div style={{ fontWeight: '600', color: '#475569', padding: '0.75rem 1rem', background: '#f8fafc', borderRadius: '0.75rem', border: '1px solid #e2e8f0' }}>
-                    {selectedMailUser.uid}:{selectedMailUser.gid}
+                  <label>Peso del Buzón</label>
+                  <div style={{ fontWeight: '800', color: '#1e293b', padding: '0.75rem 1rem', background: '#fffbeb', borderRadius: '0.75rem', border: '1px solid #fef3c7', color: '#92400e' }}>
+                    {selectedMailUser.storage_size}
                   </div>
                 </div>
                 <div className="input-group">
