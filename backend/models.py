@@ -54,3 +54,16 @@ class AuditLog(Base):
     created_at = Column(DateTime, default=datetime.utcnow, nullable=False, index=True)
     
     user = relationship('User', back_populates='audit_logs')
+
+class AutoResponder(Base):
+    __tablename__ = 'auto_responders'
+    
+    id = Column(Integer, primary_key=True, index=True)
+    email = Column(String(120), unique=True, nullable=False, index=True)
+    active = Column(Boolean, default=False, nullable=False)
+    subject = Column(String(200), nullable=True)
+    body = Column(Text, nullable=True)
+    start_date = Column(DateTime, nullable=True)
+    end_date = Column(DateTime, nullable=True)
+    created_at = Column(DateTime, default=datetime.utcnow, nullable=False)
+    updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow, nullable=False)

@@ -20,7 +20,12 @@ import {
   Shield,
   Activity,
   Database,
-  Edit2
+  Edit2,
+  Terminal,
+  Share2,
+  Copy,
+  Save,
+  ArrowRight
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
 
@@ -32,31 +37,57 @@ interface MailUser {
   email_count: number;
   new_emails: number;
   storage_size: string;
+  status: string;
+  department: string;
 }
 
 const Dashboard: React.FC = () => {
   const { user, logout } = useAuth();
   const location = useLocation();
   const [mailUsers, setMailUsers] = useState<MailUser[]>([]);
+  const [systemUsers, setSystemUsers] = useState<any[]>([]);
+  const [aliases, setAliases] = useState<any[]>([]);
+  const [forwardingRules, setForwardingRules] = useState<any[]>([]);
+  const [auditLogs, setAuditLogs] = useState<any[]>([]);
+  const [systemStatus, setSystemStatus] = useState<any>(null);
   const [loading, setLoading] = useState(true);
   const [searchTerm, setSearchTerm] = useState('');
+  const [deptFilter, setDeptFilter] = useState('');
+  const [domainFilter, setDomainFilter] = useState('');
   const [showAddModal, setShowAddModal] = useState(false);
+  const [newUser, setNewUser] = useState({ 
+    email: '', 
+    password: '', 
+    password_confirm: '', 
+    status: 'active',
+    department: '',
+    restart_soop_mail: true 
+  });
+  const [showAddAliasModal, setShowAddAliasModal] = useState(false);
+  const [newAlias, setNewAlias] = useState({ email: '', destinations: '', is_dynamic: false });
   const [showViewModal, setShowViewModal] = useState(false);
   const [showEditModal, setShowEditModal] = useState(false);
   const [selectedMailUser, setSelectedMailUser] = useState<MailUser | null>(null);
+  const [editMailUserData, setEditMailUserData] = useState({
+    password: '',
+    password_confirm: '',
+    status: 'active',
+    department: '',
+    restart_soop_mail: true
+  });
   const [editPassword, setEditPassword] = useState({ password: '', password_confirm: '' });
   
   const [newUser, setNewUser] = useState({
     email: '',
     password: '',
     password_confirm: '',
+    status: 'active',
+    department: '',
     restart_soop_mail: true
   });
   
   const activeTab = location.pathname === '/configuracion' ? 'settings' : 'users';
   
-  const [auditLogs, setAuditLogs] = useState<any[]>([]);
-  const [systemUsers, setSystemUsers] = useState<any[]>([]);
   const [showAddSystemUserModal, setShowAddSystemUserModal] = useState(false);
   const [newSystemUser, setNewSystemUser] = useState({
     username: '',
@@ -76,14 +107,59 @@ const Dashboard: React.FC = () => {
   const [actionLoading, setActionLoading] = useState(false);
   const [notification, setNotification] = useState<{message: string, type: 'success' | 'error'} | null>(null);
   
-  const [settingsTab, setSettingsTab] = useState<'profile' | 'server' | 'users' | 'logs'>('profile');
-  const [systemStatus, setSystemStatus] = useState<any>(null);
+  const [showEditSystemUserModal, setShowEditSystemUserModal] = useState(false);
+  const [editingSystemUser, setEditingSystemUser] = useState<any>(null);
+  const [editSystemUserData, setEditSystemUserData] = useState({
+    email: '',
+    full_name: '',
+    password: '',
+    is_admin: false,
+    is_active: true
+  });
+
+  const [profileForm, setProfileForm] = useState({
+    email: user?.email || '',
+    full_name: user?.full_name || ''
+  });
+  
+  const [settingsTab, setSettingsTab] = useState<'profile' | 'server' | 'users' | 'logs' | 'mail-logs' | 'aliases' | 'forwarding'>('profile');
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
   const [deleteConfig, setDeleteConfig] = useState<{
     title: string;
     message: string;
     onConfirm: () => void;
   } | null>(null);
+
+  const [mailLogs, setMailLogs] = useState<{logs: string[], path?: string} | null>(null);
+
+  const fetchMailLogs = async () => {
+    try {
+      const response = await api.get('/api/system/logs/mail');
+      setMailLogs(response.data);
+    } catch (err) {
+      showNotification('Error al cargar logs de correo', 'error');
+    }
+  };
+
+  const fetchMailAliases = async () => {
+    try {
+      const response = await api.get('/api/mail/aliases');
+      setAliases(response.data);
+    } catch (err) {
+      console.error('Error fetching aliases:', err);
+      showNotification('Error al cargar alias', 'error');
+    }
+  };
+
+  const fetchForwardingRules = async () => {
+    try {
+      const response = await api.get('/api/mail/forwarding');
+      setForwardingRules(response.data);
+    } catch (err) {
+      console.error('Error fetching forwarding rules:', err);
+      showNotification('Error al cargar reglas de reenvío', 'error');
+    }
+  };
 
   const fetchMailUsers = async () => {
     try {
@@ -118,6 +194,129 @@ const Dashboard: React.FC = () => {
     setShowDeleteConfirm(true);
   };
 
+  const [showAddForwardingModal, setShowAddForwardingModal] = useState(false);
+  const [newForwarding, setNewForwarding] = useState({ email: '', target: '' });
+
+  const handleCreateForwardingRule = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setActionLoading(true);
+    try {
+      await api.post('/api/mail/forwarding', newForwarding);
+      showNotification('Regla de reenvío creada', 'success');
+      setShowAddForwardingModal(false);
+      setNewForwarding({ email: '', target: '' });
+      fetchForwardingRules();
+    } catch (err: any) {
+      showNotification(err.response?.data?.detail || 'Error al crear regla', 'error');
+    } finally {
+      setActionLoading(false);
+    }
+  };
+
+  const handleDeleteForwardingRule = (email: string) => {
+    setDeleteConfig({
+      title: 'Eliminar Regla de Reenvío',
+      message: `¿Estás seguro de eliminar el reenvío de ${email}?`,
+      onConfirm: async () => {
+        setActionLoading(true);
+        try {
+          await api.delete(`/api/mail/forwarding/${email}`);
+          showNotification('Regla eliminada', 'success');
+          fetchForwardingRules();
+        } catch (err) {
+          showNotification('Error al eliminar regla', 'error');
+        } finally {
+          setActionLoading(false);
+          setShowDeleteConfirm(false);
+        }
+      }
+    });
+    setShowDeleteConfirm(true);
+  };
+
+  const handleCreateAlias = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setActionLoading(true);
+    try {
+      const payload = {
+        email: newAlias.email,
+        destinations: newAlias.is_dynamic ? [] : newAlias.destinations.split(',').map(d => d.trim()).filter(d => d),
+        is_dynamic: newAlias.is_dynamic
+      };
+      await api.post('/api/mail/aliases', payload);
+      showNotification('Alias creado con éxito', 'success');
+      setShowAddAliasModal(false);
+      setNewAlias({ email: '', destinations: '', is_dynamic: false });
+      fetchMailAliases();
+    } catch (err: any) {
+      showNotification(err.response?.data?.detail || 'Error al crear alias', 'error');
+    } finally {
+      setActionLoading(false);
+    }
+  };
+
+  const handleDeleteAlias = async (email: string) => {
+    setDeleteConfig({
+      title: 'Eliminar Alias Virtual',
+      message: `¿Estás seguro de eliminar el alias ${email}?`,
+      onConfirm: async () => {
+        setActionLoading(true);
+        try {
+          await api.delete(`/api/mail/aliases/${email}`);
+          showNotification('Alias eliminado', 'success');
+          fetchMailAliases();
+        } catch (err) {
+          showNotification('Error al eliminar alias', 'error');
+        } finally {
+          setActionLoading(false);
+          setShowDeleteConfirm(false);
+        }
+      }
+    });
+    setShowDeleteConfirm(true);
+  };
+
+  const [autoResponder, setAutoResponder] = useState<any>(null);
+
+  const fetchAutoResponder = async (email: string) => {
+    try {
+      const response = await api.get(`/api/mail/users/${email}/auto-responder`);
+      setAutoResponder(response.data);
+    } catch (err) {
+      console.error('Error fetching auto-responder', err);
+    }
+  };
+
+  const handleToggleAutoResponder = async () => {
+    if (!selectedMailUser || !autoResponder) return;
+    try {
+      const response = await api.put(`/api/mail/users/${selectedMailUser.email}/auto-responder`, {
+        active: !autoResponder.active
+      });
+      setAutoResponder(response.data);
+      showNotification(`Auto-respondedor ${!autoResponder.active ? 'activado' : 'desactivado'}`, 'success');
+    } catch (err) {
+      showNotification('Error al cambiar estado del auto-respondedor', 'error');
+    }
+  };
+
+  const handleSaveAutoResponder = async () => {
+    if (!selectedMailUser || !autoResponder) return;
+    setActionLoading(true);
+    try {
+      const response = await api.put(`/api/mail/users/${selectedMailUser.email}/auto-responder`, {
+        subject: autoResponder.subject,
+        body: autoResponder.body
+      });
+      setAutoResponder(response.data);
+      showNotification('Configuración guardada', 'success');
+    } catch (err) {
+      showNotification('Error al guardar configuración', 'error');
+    } finally {
+      setActionLoading(false);
+    }
+  };
+
   const fetchAuditLogs = async () => {
     try {
       const response = await api.get('/api/system/logs');
@@ -146,22 +345,87 @@ const Dashboard: React.FC = () => {
   };
 
   useEffect(() => {
+    if (activeTab === 'settings') {
+      if (settingsTab === 'logs') fetchAuditLogs();
+      if (settingsTab === 'server') fetchSystemStatus();
+      if (settingsTab === 'users' && user?.is_admin) fetchSystemUsers();
+      if (settingsTab === 'mail-logs') fetchMailLogs();
+      if (settingsTab === 'aliases') fetchMailAliases();
+      if (settingsTab === 'forwarding') fetchForwardingRules();
+    }
+  }, [activeTab, settingsTab]);
+
+  useEffect(() => {
     fetchMailUsers();
+    fetchSystemUsers();
+    fetchMailAliases();
+    fetchForwardingRules();
+    fetchAuditLogs();
+    fetchSystemStatus();
     if (activeTab === 'settings') {
       document.title = 'Configuración | soop MAIL';
-      fetchAuditLogs();
-      fetchSystemStatus();
-      if (user?.is_admin) {
-        fetchSystemUsers();
-      }
+      setProfileForm({
+        email: user?.email || '',
+        full_name: user?.full_name || ''
+      });
     } else {
       document.title = 'Usuarios | soop MAIL';
     }
-  }, [activeTab]);
+  }, [activeTab, user]);
 
   const showNotification = (message: string, type: 'success' | 'error') => {
     setNotification({ message, type });
     setTimeout(() => setNotification(null), 5000);
+  };
+
+  const handleGeneratePassword = async (target: 'new' | 'edit' | 'profile' | 'system-new' | 'system-edit') => {
+    try {
+      const response = await api.get('/api/system/utils/generate-password');
+      const pwd = response.data.password;
+      
+      if (target === 'new') {
+        setNewUser(prev => ({ ...prev, password: pwd, password_confirm: pwd }));
+      } else if (target === 'edit') {
+        setEditMailUserData(prev => ({ ...prev, password: pwd, password_confirm: pwd }));
+      } else if (target === 'profile') {
+        setPasswordForm(prev => ({ ...prev, new_password: pwd, confirm_password: pwd }));
+      } else if (target === 'system-new') {
+        setNewSystemUser(prev => ({ ...prev, password: pwd }));
+      } else if (target === 'system-edit') {
+        setEditSystemUserData(prev => ({ ...prev, password: pwd }));
+      }
+      
+      showNotification('Contraseña segura generada', 'success');
+    } catch (err) {
+      showNotification('Error al generar contraseña', 'error');
+    }
+  };
+
+  const handleUpdateMailUser = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!selectedMailUser) return;
+    setActionLoading(true);
+    try {
+      const payload: any = { 
+        status: editMailUserData.status,
+        department: editMailUserData.department,
+        restart_soop_mail: true
+      };
+      if (editMailUserData.password) {
+        payload.password = editMailUserData.password;
+        payload.password_confirm = editMailUserData.password_confirm;
+      }
+      
+      await api.put(`/api/mail/users/${selectedMailUser.email}`, payload);
+      showNotification('Usuario actualizado exitosamente', 'success');
+      setShowEditModal(false);
+      setEditMailUserData({ password: '', password_confirm: '', status: 'active', department: '', restart_soop_mail: true });
+      fetchMailUsers();
+    } catch (err: any) {
+      showNotification(err.response?.data?.detail || 'Error al actualizar usuario', 'error');
+    } finally {
+      setActionLoading(false);
+    }
   };
 
   const handleUpdateMailUserPassword = async (e: React.FormEvent) => {
@@ -196,13 +460,13 @@ const Dashboard: React.FC = () => {
       const payload = {
         ...newUser,
         email,
-        restart_soop_mail: true // Always restart as requested
+        restart_soop_mail: true
       };
 
       await api.post('/api/mail/users', payload);
       showNotification('Usuario creado exitosamente', 'success');
       setShowAddModal(false);
-      setNewUser({ email: '', password: '', password_confirm: '', restart_soop_mail: true });
+      setNewUser({ email: '', password: '', password_confirm: '', status: 'active', department: '', restart_soop_mail: true });
       fetchMailUsers();
     } catch (err: any) {
       showNotification(err.response?.data?.detail || 'Error al crear usuario', 'error');
@@ -255,6 +519,38 @@ const Dashboard: React.FC = () => {
     }
   };
 
+  const handleUpdateSystemUser = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!editingSystemUser) return;
+    setActionLoading(true);
+    try {
+      const payload: any = { ...editSystemUserData };
+      if (!payload.password) delete payload.password;
+      
+      await api.put(`/api/system/users/${editingSystemUser.id}`, payload);
+      showNotification('Usuario actualizado exitosamente', 'success');
+      setShowEditSystemUserModal(false);
+      fetchSystemUsers();
+    } catch (err: any) {
+      showNotification(err.response?.data?.detail || 'Error al actualizar usuario', 'error');
+    } finally {
+      setActionLoading(false);
+    }
+  };
+
+  const handleUpdateProfile = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setActionLoading(true);
+    try {
+      await api.put('/api/auth/me', profileForm);
+      showNotification('Perfil actualizado exitosamente', 'success');
+    } catch (err: any) {
+      showNotification(err.response?.data?.detail || 'Error al actualizar perfil', 'error');
+    } finally {
+      setActionLoading(false);
+    }
+  };
+
   const handleDeleteSystemUser = (id: number, username: string) => {
     if (id === user?.id) {
       showNotification('No puedes eliminar tu propia cuenta', 'error');
@@ -294,9 +590,13 @@ const Dashboard: React.FC = () => {
     }
   };
 
-  const filteredUsers = mailUsers.filter(u => 
-    u.email.toLowerCase().includes(searchTerm.toLowerCase())
-  );
+  const filteredUsers = mailUsers.filter(u => {
+    const matchesSearch = u.email.toLowerCase().includes(searchTerm.toLowerCase());
+    const matchesDept = !deptFilter || (u.department && u.department.toLowerCase().includes(deptFilter.toLowerCase()));
+    const domain = u.email.split('@')[1] || '';
+    const matchesDomain = !domainFilter || domain.toLowerCase().includes(domainFilter.toLowerCase());
+    return matchesSearch && matchesDept && matchesDomain;
+  });
 
   const totalMailboxes = mailUsers.length;
   const totalEmails = mailUsers.reduce((acc, curr) => acc + (curr.email_count || 0), 0);
@@ -455,16 +755,40 @@ const Dashboard: React.FC = () => {
             {/* Search and Table */}
             <div className="card" style={{ padding: '0', border: '1px solid #e2e8f0', overflow: 'hidden' }}>
               <div style={{ padding: '1.25rem 1.5rem', borderBottom: '1px solid #f1f5f9', display: 'flex', justifyContent: 'space-between', alignItems: 'center', backgroundColor: '#ffffff' }}>
-                <div style={{ position: 'relative', width: '320px' }}>
-                  <Search size={16} style={{ position: 'absolute', left: '1rem', top: '50%', transform: 'translateY(-50%)', color: '#94a3b8' }} />
-                  <input 
-                    type="text" 
-                    placeholder="Buscar por email..." 
-                    className="input-control"
-                    style={{ paddingLeft: '2.75rem', background: '#f8fafc' }}
-                    value={searchTerm}
-                    onChange={(e) => setSearchTerm(e.target.value)}
-                  />
+                <div style={{ display: 'flex', gap: '1rem', flex: 1, flexWrap: 'wrap' }}>
+                  <div style={{ position: 'relative', width: '280px' }}>
+                    <Search size={16} style={{ position: 'absolute', left: '1rem', top: '50%', transform: 'translateY(-50%)', color: '#94a3b8' }} />
+                    <input 
+                      type="text" 
+                      placeholder="Email..." 
+                      className="input-control"
+                      style={{ paddingLeft: '2.75rem', background: '#f8fafc' }}
+                      value={searchTerm}
+                      onChange={(e) => setSearchTerm(e.target.value)}
+                    />
+                  </div>
+                  <div style={{ position: 'relative', width: '200px' }}>
+                    <Database size={16} style={{ position: 'absolute', left: '1rem', top: '50%', transform: 'translateY(-50%)', color: '#94a3b8' }} />
+                    <input 
+                      type="text" 
+                      placeholder="Departamento..." 
+                      className="input-control"
+                      style={{ paddingLeft: '2.75rem', background: '#f8fafc' }}
+                      value={deptFilter}
+                      onChange={(e) => setDeptFilter(e.target.value)}
+                    />
+                  </div>
+                  <div style={{ position: 'relative', width: '200px' }}>
+                    <Share2 size={16} style={{ position: 'absolute', left: '1rem', top: '50%', transform: 'translateY(-50%)', color: '#94a3b8' }} />
+                    <input 
+                      type="text" 
+                      placeholder="Dominio..." 
+                      className="input-control"
+                      style={{ paddingLeft: '2.75rem', background: '#f8fafc' }}
+                      value={domainFilter}
+                      onChange={(e) => setDomainFilter(e.target.value)}
+                    />
+                  </div>
                 </div>
                 <button onClick={fetchMailUsers} className="btn btn-secondary" style={{ padding: '0.625rem' }}>
                   <RefreshCcw size={16} className={loading ? 'animate-spin' : ''} />
@@ -476,6 +800,8 @@ const Dashboard: React.FC = () => {
                   <thead>
                     <tr>
                       <th>USUARIO / EMAIL</th>
+                      <th>DEPARTAMENTO</th>
+                      <th>ESTADO</th>
                       <th>CORREOS</th>
                       <th style={{ textAlign: 'right' }}>ACCIONES</th>
                     </tr>
@@ -490,6 +816,21 @@ const Dashboard: React.FC = () => {
                     ) : filteredUsers.map((u) => (
                       <tr key={u.email}>
                         <td style={{ fontWeight: '600', color: '#1e293b' }}>{u.email}</td>
+                        <td style={{ fontSize: '0.875rem', color: '#64748b' }}>{u.department || '-'}</td>
+                        <td>
+                          <span style={{ 
+                            padding: '0.25rem 0.625rem', 
+                            borderRadius: '2rem', 
+                            fontSize: '0.75rem', 
+                            fontWeight: '700',
+                            textTransform: 'uppercase',
+                            background: u.status === 'suspended' ? '#fef2f2' : u.status === 'read-only' ? '#fffbeb' : '#f0fdf4',
+                            color: u.status === 'suspended' ? '#991b1b' : u.status === 'read-only' ? '#92400e' : '#166534',
+                            border: `1px solid ${u.status === 'suspended' ? '#fee2e2' : u.status === 'read-only' ? '#fef3c7' : '#dcfce7'}`
+                          }}>
+                            {u.status === 'active' ? 'Activo' : u.status === 'suspended' ? 'Suspendido' : 'Solo Lectura'}
+                          </span>
+                        </td>
                         <td>
                           <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem' }}>
                             <div style={{ 
@@ -524,7 +865,11 @@ const Dashboard: React.FC = () => {
                         <td style={{ textAlign: 'right' }}>
                           <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '0.25rem' }}>
                             <button 
-                              onClick={() => { setSelectedMailUser(u); setShowViewModal(true); }}
+                              onClick={() => { 
+                                setSelectedMailUser(u); 
+                                setShowViewModal(true); 
+                                fetchAutoResponder(u.email);
+                              }}
                               className="btn btn-secondary" 
                               style={{ color: '#6366f1', padding: '0.5rem', border: 'none', background: 'transparent', boxShadow: 'none' }}
                               title="Ver detalles"
@@ -532,10 +877,20 @@ const Dashboard: React.FC = () => {
                               <Eye size={18} />
                             </button>
                             <button 
-                              onClick={() => { setSelectedMailUser(u); setEditPassword({ password: '', password_confirm: '' }); setShowEditModal(true); }}
+                              onClick={() => { 
+                                setSelectedMailUser(u); 
+                                setEditMailUserData({ 
+                                  password: '', 
+                                  password_confirm: '', 
+                                  status: u.status || 'active', 
+                                  department: u.department || '',
+                                  restart_soop_mail: true 
+                                }); 
+                                setShowEditModal(true); 
+                              }}
                               className="btn btn-secondary" 
                               style={{ color: '#f59e0b', padding: '0.5rem', border: 'none', background: 'transparent', boxShadow: 'none' }}
-                              title="Editar contraseña"
+                              title="Editar usuario"
                             >
                               <Edit2 size={18} />
                             </button>
@@ -569,97 +924,137 @@ const Dashboard: React.FC = () => {
               gap: '0.5rem', 
               marginBottom: '2rem', 
               padding: '0.375rem', 
-              background: '#ffffff', 
-              borderRadius: '1rem',
-              width: 'fit-content',
-              border: '1px solid #e2e8f0',
-              boxShadow: '0 1px 2px 0 rgba(0, 0, 0, 0.05)'
-            }}>
+            <div style={{ display: 'flex', borderBottom: '1px solid #e2e8f0', marginBottom: '2rem', overflowX: 'auto' }}>
               <button 
                 onClick={() => setSettingsTab('profile')}
-                style={{
-                  display: 'flex',
-                  alignItems: 'center',
-                  gap: '0.5rem',
-                  padding: '0.625rem 1.25rem',
-                  borderRadius: '0.75rem',
-                  fontSize: '0.875rem',
+                style={{ 
+                  padding: '1rem 1.5rem', 
+                  borderBottom: settingsTab === 'profile' ? '2px solid #4f46e5' : '2px solid transparent',
+                  color: settingsTab === 'profile' ? '#4f46e5' : '#64748b',
                   fontWeight: '600',
-                  transition: 'all 0.2s',
-                  border: 'none',
+                  fontSize: '0.875rem',
+                  background: 'none',
+                  borderTop: 'none',
+                  borderLeft: 'none',
+                  borderRight: 'none',
                   cursor: 'pointer',
-                  background: settingsTab === 'profile' ? '#4f46e5' : 'transparent',
-                  color: settingsTab === 'profile' ? '#ffffff' : '#64748b',
+                  whiteSpace: 'nowrap'
                 }}
               >
-                <Shield size={16} />
-                Seguridad
+                Mi Perfil
               </button>
               <button 
-                onClick={() => {
-                  setSettingsTab('server');
-                  fetchSystemStatus();
-                }}
-                style={{
-                  display: 'flex',
-                  alignItems: 'center',
-                  gap: '0.5rem',
-                  padding: '0.625rem 1.25rem',
-                  borderRadius: '0.75rem',
-                  fontSize: '0.875rem',
+                onClick={() => setSettingsTab('server')}
+                style={{ 
+                  padding: '1rem 1.5rem', 
+                  borderBottom: settingsTab === 'server' ? '2px solid #4f46e5' : '2px solid transparent',
+                  color: settingsTab === 'server' ? '#4f46e5' : '#64748b',
                   fontWeight: '600',
-                  transition: 'all 0.2s',
-                  border: 'none',
+                  fontSize: '0.875rem',
+                  background: 'none',
+                  borderTop: 'none',
+                  borderLeft: 'none',
+                  borderRight: 'none',
                   cursor: 'pointer',
-                  background: settingsTab === 'server' ? '#4f46e5' : 'transparent',
-                  color: settingsTab === 'server' ? '#ffffff' : '#64748b',
+                  whiteSpace: 'nowrap'
                 }}
               >
-                <Server size={16} />
                 Servidor
               </button>
-              {user?.is_admin && (
-                <button 
-                  onClick={() => setSettingsTab('users')}
-                  style={{
-                    display: 'flex',
-                    alignItems: 'center',
-                    gap: '0.5rem',
-                    padding: '0.625rem 1.25rem',
-                    borderRadius: '0.75rem',
-                    fontSize: '0.875rem',
-                    fontWeight: '600',
-                    transition: 'all 0.2s',
-                    border: 'none',
-                    cursor: 'pointer',
-                    background: settingsTab === 'users' ? '#4f46e5' : 'transparent',
-                    color: settingsTab === 'users' ? '#ffffff' : '#64748b',
-                  }}
-                >
-                  <UserPlus size={16} />
-                  Accesos
-                </button>
-              )}
               <button 
-                onClick={() => setSettingsTab('logs')}
-                style={{
-                  display: 'flex',
-                  alignItems: 'center',
-                  gap: '0.5rem',
-                  padding: '0.625rem 1.25rem',
-                  borderRadius: '0.75rem',
-                  fontSize: '0.875rem',
+                onClick={() => setSettingsTab('aliases')}
+                style={{ 
+                  padding: '1rem 1.5rem', 
+                  borderBottom: settingsTab === 'aliases' ? '2px solid #4f46e5' : '2px solid transparent',
+                  color: settingsTab === 'aliases' ? '#4f46e5' : '#64748b',
                   fontWeight: '600',
-                  transition: 'all 0.2s',
-                  border: 'none',
+                  fontSize: '0.875rem',
+                  background: 'none',
+                  borderTop: 'none',
+                  borderLeft: 'none',
+                  borderRight: 'none',
                   cursor: 'pointer',
-                  background: settingsTab === 'logs' ? '#4f46e5' : 'transparent',
-                  color: settingsTab === 'logs' ? '#ffffff' : '#64748b',
+                  whiteSpace: 'nowrap'
                 }}
               >
-                <Activity size={16} />
-                Auditoría
+                Alias y Listas
               </button>
+              <button 
+                onClick={() => setSettingsTab('forwarding')}
+                style={{ 
+                  padding: '1rem 1.5rem', 
+                  borderBottom: settingsTab === 'forwarding' ? '2px solid #4f46e5' : '2px solid transparent',
+                  color: settingsTab === 'forwarding' ? '#4f46e5' : '#64748b',
+                  fontWeight: '600',
+                  fontSize: '0.875rem',
+                  background: 'none',
+                  borderTop: 'none',
+                  borderLeft: 'none',
+                  borderRight: 'none',
+                  cursor: 'pointer',
+                  whiteSpace: 'nowrap'
+                }}
+              >
+                Reenvíos (BCC)
+              </button>
+              {user?.is_admin && (
+                <>
+                  <button 
+                    onClick={() => setSettingsTab('users')}
+                    style={{ 
+                      padding: '1rem 1.5rem', 
+                      borderBottom: settingsTab === 'users' ? '2px solid #4f46e5' : '2px solid transparent',
+                      color: settingsTab === 'users' ? '#4f46e5' : '#64748b',
+                      fontWeight: '600',
+                      fontSize: '0.875rem',
+                      background: 'none',
+                      borderTop: 'none',
+                      borderLeft: 'none',
+                      borderRight: 'none',
+                      cursor: 'pointer',
+                      whiteSpace: 'nowrap'
+                    }}
+                  >
+                    Accesos
+                  </button>
+                  <button 
+                    onClick={() => setSettingsTab('logs')}
+                    style={{ 
+                      padding: '1rem 1.5rem', 
+                      borderBottom: settingsTab === 'logs' ? '2px solid #4f46e5' : '2px solid transparent',
+                      color: settingsTab === 'logs' ? '#4f46e5' : '#64748b',
+                      fontWeight: '600',
+                      fontSize: '0.875rem',
+                      background: 'none',
+                      borderTop: 'none',
+                      borderLeft: 'none',
+                      borderRight: 'none',
+                      cursor: 'pointer',
+                      whiteSpace: 'nowrap'
+                    }}
+                  >
+                    Auditoría
+                  </button>
+                  <button 
+                    onClick={() => setSettingsTab('mail-logs')}
+                    style={{ 
+                      padding: '1rem 1.5rem', 
+                      borderBottom: settingsTab === 'mail-logs' ? '2px solid #4f46e5' : '2px solid transparent',
+                      color: settingsTab === 'mail-logs' ? '#4f46e5' : '#64748b',
+                      fontWeight: '600',
+                      fontSize: '0.875rem',
+                      background: 'none',
+                      borderTop: 'none',
+                      borderLeft: 'none',
+                      borderRight: 'none',
+                      cursor: 'pointer',
+                      whiteSpace: 'nowrap'
+                    }}
+                  >
+                    Logs Mail
+                  </button>
+                </>
+              )}
             </div>
 
             <div style={{ width: '100%' }}>
@@ -674,67 +1069,114 @@ const Dashboard: React.FC = () => {
                     style={{ padding: '2rem' }}
                   >
                     <div style={{ marginBottom: '2rem' }}>
-                      <h3 style={{ fontSize: '1.25rem', fontWeight: '700', color: '#1e293b', marginBottom: '0.5rem' }}>Seguridad de la Cuenta</h3>
-                      <p style={{ color: '#64748b', fontSize: '0.875rem' }}>Actualiza tu contraseña periódicamente para mantener tu cuenta segura.</p>
+                      <h3 style={{ fontSize: '1.25rem', fontWeight: '700', color: '#1e293b', marginBottom: '0.5rem' }}>Perfil de Usuario</h3>
+                      <p style={{ color: '#64748b', fontSize: '0.875rem' }}>Administra tu información personal y configuración de acceso.</p>
                     </div>
                     
-                    <form onSubmit={handleChangePassword} style={{ maxWidth: '500px' }}>
-                      <div className="input-group">
-                        <label>Contraseña Actual</label>
-                        <div style={{ position: 'relative' }}>
-                          <input 
-                            type={showSettingsPassword ? "text" : "password"} 
-                            className="input-control" 
-                            value={passwordForm.current_password}
-                            onChange={e => setPasswordForm({...passwordForm, current_password: e.target.value})}
-                            required
-                          />
-                          <button 
-                            type="button"
-                            onClick={() => setShowSettingsPassword(!showSettingsPassword)}
-                            style={{ 
-                              position: 'absolute', 
-                              right: '0.75rem', 
-                              top: '50%', 
-                              transform: 'translateY(-50%)',
-                              background: 'none',
-                              border: 'none',
-                              color: '#94a3b8',
-                              cursor: 'pointer',
-                              display: 'flex',
-                              padding: '0.5rem'
-                            }}
-                          >
-                            {showSettingsPassword ? <EyeOff size={18} /> : <Eye size={18} />}
+                    <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '2.5rem' }}>
+                      <div style={{ borderRight: '1px solid #f1f5f9', paddingRight: '2.5rem' }}>
+                        <h4 style={{ fontSize: '1rem', fontWeight: '700', color: '#1e293b', marginBottom: '1.5rem', display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+                          <Users size={18} style={{ color: '#4f46e5' }} />
+                          Datos Personales
+                        </h4>
+                        <form onSubmit={handleUpdateProfile}>
+                          <div className="input-group">
+                            <label>Nombre Completo</label>
+                            <input 
+                              type="text" 
+                              className="input-control" 
+                              value={profileForm.full_name}
+                              onChange={e => setProfileForm({...profileForm, full_name: e.target.value})}
+                              required
+                            />
+                          </div>
+                          <div className="input-group">
+                            <label>Correo Electrónico</label>
+                            <input 
+                              type="email" 
+                              className="input-control" 
+                              value={profileForm.email}
+                              onChange={e => setProfileForm({...profileForm, email: e.target.value})}
+                              required
+                            />
+                          </div>
+                          <button type="submit" className="btn btn-primary" disabled={actionLoading}>
+                            {actionLoading ? 'Guardando...' : 'Guardar Cambios'}
                           </button>
-                        </div>
+                        </form>
                       </div>
-                      <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '1.5rem' }}>
-                        <div className="input-group">
-                          <label>Nueva Contraseña</label>
-                          <input 
-                            type={showSettingsPassword ? "text" : "password"} 
-                            className="input-control" 
-                            value={passwordForm.new_password}
-                            onChange={e => setPasswordForm({...passwordForm, new_password: e.target.value})}
-                            required
-                          />
-                        </div>
-                        <div className="input-group">
-                          <label>Confirmar Nueva</label>
-                          <input 
-                            type={showSettingsPassword ? "text" : "password"} 
-                            className="input-control" 
-                            value={passwordForm.confirm_password}
-                            onChange={e => setPasswordForm({...passwordForm, confirm_password: e.target.value})}
-                            required
-                          />
-                        </div>
+
+                      <div>
+                        <h4 style={{ fontSize: '1rem', fontWeight: '700', color: '#1e293b', marginBottom: '1.5rem', display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+                          <Shield size={18} style={{ color: '#4f46e5' }} />
+                          Cambiar Contraseña
+                        </h4>
+                        <form onSubmit={handleChangePassword}>
+                          <div className="input-group">
+                            <label>Contraseña Actual</label>
+                            <div style={{ position: 'relative' }}>
+                              <input 
+                                type={showSettingsPassword ? "text" : "password"} 
+                                className="input-control" 
+                                value={passwordForm.current_password}
+                                onChange={e => setPasswordForm({...passwordForm, current_password: e.target.value})}
+                                required
+                              />
+                              <button 
+                                type="button"
+                                onClick={() => setShowSettingsPassword(!showSettingsPassword)}
+                                style={{ 
+                                  position: 'absolute', 
+                                  right: '0.75rem', 
+                                  top: '50%', 
+                                  transform: 'translateY(-50%)',
+                                  background: 'none',
+                                  border: 'none',
+                                  color: '#94a3b8',
+                                  cursor: 'pointer',
+                                  display: 'flex',
+                                  padding: '0.5rem'
+                                }}
+                              >
+                                {showSettingsPassword ? <EyeOff size={18} /> : <Eye size={18} />}
+                              </button>
+                            </div>
+                          </div>
+                          <div className="input-group">
+                            <label style={{ display: 'flex', justifyContent: 'space-between' }}>
+                              Nueva Contraseña
+                              <button 
+                                type="button" 
+                                onClick={() => handleGeneratePassword('profile')}
+                                style={{ background: 'none', border: 'none', color: '#4f46e5', fontSize: '0.75rem', cursor: 'pointer', fontWeight: '600' }}
+                              >
+                                Generar segura
+                              </button>
+                            </label>
+                            <input 
+                              type={showSettingsPassword ? "text" : "password"} 
+                              className="input-control" 
+                              value={passwordForm.new_password}
+                              onChange={e => setPasswordForm({...passwordForm, new_password: e.target.value})}
+                              required
+                            />
+                          </div>
+                          <div className="input-group">
+                            <label>Confirmar Nueva</label>
+                            <input 
+                              type={showSettingsPassword ? "text" : "password"} 
+                              className="input-control" 
+                              value={passwordForm.confirm_password}
+                              onChange={e => setPasswordForm({...passwordForm, confirm_password: e.target.value})}
+                              required
+                            />
+                          </div>
+                          <button type="submit" className="btn btn-primary" disabled={actionLoading}>
+                            {actionLoading ? 'Actualizar Contraseña' : 'Actualizar Contraseña'}
+                          </button>
+                        </form>
                       </div>
-                      <button type="submit" className="btn btn-primary" disabled={actionLoading} style={{ marginTop: '1rem' }}>
-                        {actionLoading ? 'Actualizando...' : 'Actualizar Contraseña'}
-                      </button>
-                    </form>
+                    </div>
                   </motion.div>
                 )}
 
@@ -1093,15 +1535,34 @@ const Dashboard: React.FC = () => {
                                   </span>
                                 )}
                               </td>
-                              <td style={{ textAlign: 'right' }}>
-                                <button 
-                                  onClick={() => handleDeleteSystemUser(u.id, u.username)}
-                                  disabled={u.id === user?.id}
-                                  className="btn btn-secondary"
-                                  style={{ color: u.id === user?.id ? '#cbd5e1' : '#ef4444', border: 'none', background: 'transparent', boxShadow: 'none' }}
-                                >
-                                  <Trash2 size={18} />
-                                </button>
+                               <td style={{ textAlign: 'right' }}>
+                                <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '0.5rem' }}>
+                                  <button 
+                                    onClick={() => {
+                                      setEditingSystemUser(u);
+                                      setEditSystemUserData({
+                                        email: u.email,
+                                        full_name: u.full_name || '',
+                                        password: '',
+                                        is_admin: u.is_admin,
+                                        is_active: u.is_active
+                                      });
+                                      setShowEditSystemUserModal(true);
+                                    }}
+                                    className="btn btn-secondary"
+                                    style={{ color: '#f59e0b', border: 'none', background: 'transparent', boxShadow: 'none' }}
+                                  >
+                                    <Edit2 size={18} />
+                                  </button>
+                                  <button 
+                                    onClick={() => handleDeleteSystemUser(u.id, u.username)}
+                                    disabled={u.id === user?.id}
+                                    className="btn btn-secondary"
+                                    style={{ color: u.id === user?.id ? '#cbd5e1' : '#ef4444', border: 'none', background: 'transparent', boxShadow: 'none' }}
+                                  >
+                                    <Trash2 size={18} />
+                                  </button>
+                                </div>
                               </td>
                             </tr>
                           ))}
@@ -1156,6 +1617,188 @@ const Dashboard: React.FC = () => {
                           ))}
                         </tbody>
                       </table>
+                    </div>
+                  </motion.div>
+                )}
+
+                {settingsTab === 'mail-logs' && (
+                  <motion.div 
+                    key="mail-logs"
+                    initial={{ opacity: 0, x: 20 }}
+                    animate={{ opacity: 1, x: 0 }}
+                    exit={{ opacity: 0, x: -20 }}
+                    className="card" 
+                    style={{ padding: '0', overflow: 'hidden', background: '#0f172a', border: '1px solid #1e293b' }}
+                  >
+                    <div style={{ padding: '1.25rem 2rem', borderBottom: '1px solid #1e293b', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                      <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem' }}>
+                        <Terminal size={18} style={{ color: '#818cf8' }} />
+                        <div>
+                          <h3 style={{ fontSize: '1.125rem', fontWeight: '700', color: '#f8fafc', marginBottom: '0.125rem' }}>Logs del Servidor de Correo</h3>
+                          <p style={{ color: '#94a3b8', fontSize: '0.75rem' }}>{mailLogs?.path || 'Visor de /var/log/mail.log'}</p>
+                        </div>
+                      </div>
+                      <div style={{ display: 'flex', gap: '0.5rem' }}>
+                        <button onClick={fetchMailLogs} className="btn" style={{ background: '#1e293b', color: '#f8fafc', border: 'none', padding: '0.5rem' }}>
+                          <RefreshCcw size={16} />
+                        </button>
+                      </div>
+                    </div>
+                    <div style={{ 
+                      maxHeight: '600px', 
+                      overflowY: 'auto', 
+                      padding: '1.5rem', 
+                      fontFamily: '"Fira Code", "Source Code Pro", monospace',
+                      fontSize: '0.813rem',
+                      lineHeight: '1.5',
+                      color: '#cbd5e1'
+                    }}>
+                      {!mailLogs ? (
+                        <div style={{ padding: '2rem', textAlign: 'center', color: '#64748b' }}>Cargando logs...</div>
+                      ) : mailLogs.logs.length === 0 ? (
+                        <div style={{ padding: '2rem', textAlign: 'center', color: '#64748b' }}>No hay registros disponibles.</div>
+                      ) : mailLogs.logs.map((line, idx) => (
+                        <div key={idx} style={{ 
+                          padding: '0.125rem 0', 
+                          borderBottom: '1px solid #1e293b40',
+                          display: 'flex',
+                          gap: '1rem'
+                        }}>
+                          <span style={{ color: '#475569', userSelect: 'none', minWidth: '2rem', textAlign: 'right' }}>{idx + 1}</span>
+                          <span style={{ 
+                            color: line.includes('error') || line.includes('fatal') || line.includes('reject') ? '#f87171' : 
+                                   line.includes('warning') ? '#fbbf24' : 
+                                   line.includes('connect from') ? '#60a5fa' : '#cbd5e1' 
+                          }}>
+                            {line}
+                          </span>
+                        </div>
+                      ))}
+                    </div>
+                  </motion.div>
+                )}
+
+                {settingsTab === 'forwarding' && (
+                  <motion.div 
+                    key="forwarding"
+                    initial={{ opacity: 0, x: 20 }}
+                    animate={{ opacity: 1, x: 0 }}
+                    exit={{ opacity: 0, x: -20 }}
+                    className="card" 
+                    style={{ padding: '2rem' }}
+                  >
+                    <div>
+                      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1.5rem' }}>
+                        <div>
+                          <h3 style={{ fontSize: '1rem', fontWeight: '700', color: '#1e293b' }}>Reglas de Reenvío (BCC)</h3>
+                          <p style={{ fontSize: '0.813rem', color: '#64748b' }}>Copia oculta de correos salientes para supervisión.</p>
+                        </div>
+                        <button className="btn btn-primary" onClick={() => setShowAddForwardingModal(true)}>
+                          <Plus size={16} />
+                          Nueva Regla
+                        </button>
+                      </div>
+                      <div className="table-container">
+                        <table className="table">
+                          <thead>
+                            <tr>
+                              <th>Emisor</th>
+                              <th>Copiar a</th>
+                              <th style={{ textAlign: 'right' }}>Acciones</th>
+                            </tr>
+                          </thead>
+                          <tbody>
+                            {forwardingRules.map((rule, idx) => (
+                              <tr key={idx}>
+                                <td style={{ fontWeight: '600' }}>{rule.email}</td>
+                                <td>{rule.target}</td>
+                                <td style={{ textAlign: 'right' }}>
+                                  <button 
+                                    className="btn-icon" 
+                                    style={{ color: '#ef4444' }}
+                                    onClick={() => handleDeleteForwardingRule(rule.email)}
+                                  >
+                                    <Trash2 size={16} />
+                                  </button>
+                                </td>
+                              </tr>
+                            ))}
+                            {forwardingRules.length === 0 && (
+                              <tr>
+                                <td colSpan={3} style={{ textAlign: 'center', padding: '3rem', color: '#94a3b8' }}>
+                                  No hay reglas de reenvío configuradas.
+                                </td>
+                              </tr>
+                            )}
+                          </tbody>
+                        </table>
+                      </div>
+                    </div>
+                  </motion.div>
+                )}
+
+                {settingsTab === 'aliases' && (
+                  <motion.div 
+                    key="aliases"
+                    initial={{ opacity: 0, x: 20 }}
+                    animate={{ opacity: 1, x: 0 }}
+                    exit={{ opacity: 0, x: -20 }}
+                    className="card" 
+                    style={{ padding: '2rem' }}
+                  >
+                    <div>
+                      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1.5rem' }}>
+                        <div>
+                          <h3 style={{ fontSize: '1rem', fontWeight: '700', color: '#1e293b' }}>Alias y Listas</h3>
+                          <p style={{ fontSize: '0.813rem', color: '#64748b' }}>Direcciones virtuales y grupos de distribución.</p>
+                        </div>
+                        <button className="btn btn-primary" onClick={() => setShowAddAliasModal(true)}>
+                          <Plus size={16} />
+                          Nuevo Alias
+                        </button>
+                      </div>
+
+                      <div style={{ overflowX: 'auto', border: '1px solid #f1f5f9', borderRadius: '1rem' }}>
+                        <table>
+                          <thead>
+                            <tr>
+                              <th>DIRECCIÓN VIRTUAL</th>
+                              <th>DESTINATARIOS</th>
+                              <th style={{ textAlign: 'right' }}>ACCIONES</th>
+                            </tr>
+                          </thead>
+                          <tbody>
+                            {aliases.length === 0 ? (
+                              <tr><td colSpan={3} style={{ textAlign: 'center', padding: '3rem', color: '#94a3b8' }}>No se han configurado alias.</td></tr>
+                            ) : aliases.map((alias) => (
+                              <tr key={alias.email}>
+                                <td>
+                                  <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+                                    <Share2 size={16} style={{ color: '#6366f1' }} />
+                                    <span style={{ fontWeight: '700', color: '#1e293b' }}>{alias.email}</span>
+                                  </div>
+                                </td>
+                                <td>
+                                  <div style={{ display: 'flex', flexWrap: 'wrap', gap: '0.25rem' }}>
+                                    {alias.destinations.map((dest: string) => (
+                                      <span key={dest} className="badge badge-secondary" style={{ fontSize: '0.75rem' }}>{dest}</span>
+                                    ))}
+                                  </div>
+                                </td>
+                                <td style={{ textAlign: 'right' }}>
+                                  <button 
+                                    onClick={() => handleDeleteAlias(alias.email)}
+                                    className="btn btn-secondary"
+                                    style={{ color: '#ef4444', border: 'none', background: 'transparent', boxShadow: 'none' }}
+                                  >
+                                    <Trash2 size={18} />
+                                  </button>
+                                </td>
+                              </tr>
+                            ))}
+                          </tbody>
+                        </table>
+                      </div>
                     </div>
                   </motion.div>
                 )}
@@ -1244,9 +1887,18 @@ const Dashboard: React.FC = () => {
                   </span>
                 </div>
               </div>
-              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '1rem' }}>
-                <div className="input-group">
-                  <label>Contraseña</label>
+              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '1rem', alignItems: 'flex-end' }}>
+                <div className="input-group" style={{ marginBottom: '1rem' }}>
+                  <label style={{ display: 'flex', justifyContent: 'space-between' }}>
+                    Contraseña
+                    <button 
+                      type="button" 
+                      onClick={() => handleGeneratePassword('new')}
+                      style={{ background: 'none', border: 'none', color: '#4f46e5', fontSize: '0.75rem', cursor: 'pointer', fontWeight: '600' }}
+                    >
+                      Generar segura
+                    </button>
+                  </label>
                   <div style={{ position: 'relative' }}>
                     <input 
                       type={showPassword ? "text" : "password"} 
@@ -1276,7 +1928,7 @@ const Dashboard: React.FC = () => {
                     </button>
                   </div>
                 </div>
-                <div className="input-group">
+                <div className="input-group" style={{ marginBottom: '1rem' }}>
                   <label>Confirmar</label>
                   <input 
                     type={showPassword ? "text" : "password"} 
@@ -1286,6 +1938,31 @@ const Dashboard: React.FC = () => {
                     onChange={e => setNewUser({...newUser, password_confirm: e.target.value})}
                     required
                   />
+                </div>
+              </div>
+
+              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '1rem', marginBottom: '1.5rem' }}>
+                <div className="input-group" style={{ marginBottom: 0 }}>
+                  <label>Departamento</label>
+                  <input 
+                    type="text" 
+                    className="input-control" 
+                    placeholder="Sistemas, Contabilidad..."
+                    value={newUser.department}
+                    onChange={e => setNewUser({...newUser, department: e.target.value})}
+                  />
+                </div>
+                <div className="input-group" style={{ marginBottom: 0 }}>
+                  <label>Estado de Cuenta</label>
+                  <select 
+                    className="input-control" 
+                    value={newUser.status}
+                    onChange={e => setNewUser({...newUser, status: e.target.value})}
+                  >
+                    <option value="active">Activo</option>
+                    <option value="suspended">Suspendido</option>
+                    <option value="read-only">Solo Lectura</option>
+                  </select>
                 </div>
               </div>
               <div style={{ display: 'none' }}>
@@ -1367,7 +2044,16 @@ const Dashboard: React.FC = () => {
               </div>
 
               <div className="input-group">
-                <label>Contraseña</label>
+                <label style={{ display: 'flex', justifyContent: 'space-between' }}>
+                  Contraseña
+                  <button 
+                    type="button" 
+                    onClick={() => handleGeneratePassword('system-new')}
+                    style={{ background: 'none', border: 'none', color: '#4f46e5', fontSize: '0.75rem', cursor: 'pointer', fontWeight: '600' }}
+                  >
+                    Generar segura
+                  </button>
+                </label>
                 <input 
                   type="password" 
                   className="input-control" 
@@ -1469,6 +2155,53 @@ const Dashboard: React.FC = () => {
                 </div>
               </div>
 
+              <div style={{ borderTop: '1px solid #f1f5f9', paddingTop: '1.5rem', marginTop: '0.5rem' }}>
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1rem' }}>
+                  <h4 style={{ fontSize: '0.875rem', fontWeight: '700', color: '#1e293b' }}>Auto-respondedor (Vacaciones)</h4>
+                  <button 
+                    onClick={() => handleToggleAutoResponder()}
+                    className={`btn ${autoResponder?.active ? 'btn-primary' : 'btn-secondary'}`}
+                    style={{ padding: '0.375rem 0.75rem', fontSize: '0.75rem' }}
+                  >
+                    {autoResponder?.active ? 'Desactivar' : 'Activar'}
+                  </button>
+                </div>
+                
+                {autoResponder?.active && (
+                  <div style={{ display: 'flex', flexDirection: 'column', gap: '0.75rem', padding: '1rem', background: '#f8fafc', borderRadius: '1rem', border: '1px solid #e2e8f0' }}>
+                    <div className="input-group" style={{ marginBottom: 0 }}>
+                      <label style={{ fontSize: '0.7rem' }}>Asunto</label>
+                      <input 
+                        type="text" 
+                        className="input-control" 
+                        style={{ padding: '0.5rem 0.75rem', fontSize: '0.813rem' }}
+                        value={autoResponder.subject || ''}
+                        onChange={e => setAutoResponder({...autoResponder, subject: e.target.value})}
+                      />
+                    </div>
+                    <div className="input-group" style={{ marginBottom: 0 }}>
+                      <label style={{ fontSize: '0.7rem' }}>Mensaje</label>
+                      <textarea 
+                        className="input-control" 
+                        style={{ padding: '0.5rem 0.75rem', fontSize: '0.813rem', minHeight: '80px' }}
+                        value={autoResponder.body || ''}
+                        onChange={e => setAutoResponder({...autoResponder, body: e.target.value})}
+                      />
+                    </div>
+                    <button 
+                      onClick={handleSaveAutoResponder}
+                      className="btn btn-primary"
+                      style={{ padding: '0.5rem', fontSize: '0.75rem', alignSelf: 'flex-end' }}
+                      disabled={actionLoading}
+                    >
+                      <Save size={14} />
+                      {actionLoading ? 'Guardando...' : 'Guardar Configuración'}
+                    </button>
+                  </div>
+                )}
+              </div>
+            </div>
+
               <div className="input-group">
                 <label>Ruta de Almacenamiento (Home)</label>
                 <code style={{ 
@@ -1528,23 +2261,31 @@ const Dashboard: React.FC = () => {
             className="card" 
             style={{ width: '100%', maxWidth: '480px', padding: '2.5rem', border: 'none', boxShadow: '0 25px 50px -12px rgba(0, 0, 0, 0.25)' }}
           >
-            <h2 style={{ fontSize: '1.5rem', fontWeight: '800', marginBottom: '0.5rem', color: '#1e293b' }}>Editar Contraseña</h2>
+            <h2 style={{ fontSize: '1.5rem', fontWeight: '800', marginBottom: '0.5rem', color: '#1e293b' }}>Editar Usuario</h2>
             <p style={{ color: '#64748b', fontSize: '0.875rem', marginBottom: '2rem' }}>
               Cambiar la contraseña para <strong>{selectedMailUser.email}</strong>.
             </p>
             
-            <form onSubmit={handleUpdateMailUserPassword}>
-              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '1rem' }}>
-                <div className="input-group">
-                  <label>Nueva Contraseña</label>
+            <form onSubmit={handleUpdateMailUser}>
+              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '1rem', alignItems: 'flex-end' }}>
+                <div className="input-group" style={{ marginBottom: '1rem' }}>
+                  <label style={{ display: 'flex', justifyContent: 'space-between' }}>
+                    Nueva Contraseña
+                    <button 
+                      type="button" 
+                      onClick={() => handleGeneratePassword('edit')}
+                      style={{ background: 'none', border: 'none', color: '#4f46e5', fontSize: '0.75rem', cursor: 'pointer', fontWeight: '600' }}
+                    >
+                      Generar segura
+                    </button>
+                  </label>
                   <div style={{ position: 'relative' }}>
                     <input 
                       type={showPassword ? "text" : "password"} 
                       className="input-control" 
-                      placeholder="••••••••"
-                      value={editPassword.password}
-                      onChange={e => setEditPassword({...editPassword, password: e.target.value})}
-                      required
+                      placeholder="Dejar vacío para no cambiar"
+                      value={editMailUserData.password}
+                      onChange={e => setEditMailUserData({...editMailUserData, password: e.target.value})}
                     />
                     <button 
                       type="button"
@@ -1566,16 +2307,40 @@ const Dashboard: React.FC = () => {
                     </button>
                   </div>
                 </div>
-                <div className="input-group">
+                <div className="input-group" style={{ marginBottom: '1rem' }}>
                   <label>Confirmar</label>
                   <input 
                     type={showPassword ? "text" : "password"} 
                     className="input-control" 
-                    placeholder="••••••••"
-                    value={editPassword.password_confirm}
-                    onChange={e => setEditPassword({...editPassword, password_confirm: e.target.value})}
-                    required
+                    placeholder="Dejar vacío para no cambiar"
+                    value={editMailUserData.password_confirm}
+                    onChange={e => setEditMailUserData({...editMailUserData, password_confirm: e.target.value})}
                   />
+                </div>
+              </div>
+
+              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '1rem', marginBottom: '1.5rem' }}>
+                <div className="input-group" style={{ marginBottom: 0 }}>
+                  <label>Departamento</label>
+                  <input 
+                    type="text" 
+                    className="input-control" 
+                    placeholder="Sistemas, Contabilidad..."
+                    value={editMailUserData.department}
+                    onChange={e => setEditMailUserData({...editMailUserData, department: e.target.value})}
+                  />
+                </div>
+                <div className="input-group" style={{ marginBottom: 0 }}>
+                  <label>Estado de Cuenta</label>
+                  <select 
+                    className="input-control" 
+                    value={editMailUserData.status}
+                    onChange={e => setEditMailUserData({...editMailUserData, status: e.target.value})}
+                  >
+                    <option value="active">Activo</option>
+                    <option value="suspended">Suspendido</option>
+                    <option value="read-only">Solo Lectura</option>
+                  </select>
                 </div>
               </div>
 
@@ -1650,6 +2415,235 @@ const Dashboard: React.FC = () => {
                 {actionLoading ? 'Eliminando...' : 'Eliminar'}
               </button>
             </div>
+          </motion.div>
+        </div>
+      )}
+
+      {/* Edit System User Modal */}
+      {showEditSystemUserModal && editingSystemUser && (
+        <div style={{ 
+          position: 'fixed', 
+          inset: 0, 
+          background: 'rgba(15, 23, 42, 0.4)', 
+          backdropFilter: 'blur(8px)',
+          display: 'flex', 
+          alignItems: 'center', 
+          justifyContent: 'center',
+          zIndex: 100
+        }}>
+          <motion.div 
+            initial={{ scale: 0.9, opacity: 0, y: 20 }}
+            animate={{ scale: 1, opacity: 1, y: 0 }}
+            className="card" 
+            style={{ width: '100%', maxWidth: '500px', padding: '2.5rem', border: 'none', boxShadow: '0 25px 50px -12px rgba(0, 0, 0, 0.25)' }}
+          >
+            <h2 style={{ fontSize: '1.5rem', fontWeight: '800', marginBottom: '0.5rem', color: '#1e293b' }}>Editar Acceso</h2>
+            <p style={{ color: '#64748b', fontSize: '0.875rem', marginBottom: '2rem' }}>Editando configuración para <strong>{editingSystemUser.username}</strong>.</p>
+            
+            <form onSubmit={handleUpdateSystemUser}>
+              <div className="input-group">
+                <label>Nombre Completo</label>
+                <input 
+                  type="text" 
+                  className="input-control" 
+                  value={editSystemUserData.full_name}
+                  onChange={e => setEditSystemUserData({...editSystemUserData, full_name: e.target.value})}
+                />
+              </div>
+
+              <div className="input-group">
+                <label>Correo Electrónico</label>
+                <input 
+                  type="email" 
+                  className="input-control" 
+                  value={editSystemUserData.email}
+                  onChange={e => setEditSystemUserData({...editSystemUserData, email: e.target.value})}
+                  required
+                />
+              </div>
+
+              <div className="input-group">
+                <label style={{ display: 'flex', justifyContent: 'space-between' }}>
+                  Nueva Contraseña (dejar en blanco para no cambiar)
+                  <button 
+                    type="button" 
+                    onClick={() => handleGeneratePassword('system-edit')}
+                    style={{ background: 'none', border: 'none', color: '#4f46e5', fontSize: '0.75rem', cursor: 'pointer', fontWeight: '600' }}
+                  >
+                    Generar segura
+                  </button>
+                </label>
+                <input 
+                  type="password" 
+                  className="input-control" 
+                  placeholder="••••••••"
+                  value={editSystemUserData.password}
+                  onChange={e => setEditSystemUserData({...editSystemUserData, password: e.target.value})}
+                />
+              </div>
+
+              <div style={{ display: 'flex', gap: '1.5rem', marginBottom: '2rem' }}>
+                <label style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', cursor: 'pointer', marginBottom: 0 }}>
+                  <input 
+                    type="checkbox" 
+                    checked={editSystemUserData.is_admin}
+                    onChange={e => setEditSystemUserData({...editSystemUserData, is_admin: e.target.checked})}
+                    disabled={editingSystemUser.id === user?.id}
+                    style={{ width: '16px', height: '16px' }}
+                  />
+                  <span style={{ fontSize: '0.875rem', color: '#475569' }}>Es Administrador</span>
+                </label>
+                <label style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', cursor: 'pointer', marginBottom: 0 }}>
+                  <input 
+                    type="checkbox" 
+                    checked={editSystemUserData.is_active}
+                    onChange={e => setEditSystemUserData({...editSystemUserData, is_active: e.target.checked})}
+                    disabled={editingSystemUser.id === user?.id}
+                    style={{ width: '16px', height: '16px' }}
+                  />
+                  <span style={{ fontSize: '0.875rem', color: '#475569' }}>Activo</span>
+                </label>
+              </div>
+              
+              <div style={{ display: 'flex', gap: '1rem', justifyContent: 'flex-end' }}>
+                <button type="button" onClick={() => setShowEditSystemUserModal(false)} className="btn btn-secondary">Cancelar</button>
+                <button type="submit" className="btn btn-primary" disabled={actionLoading}>
+                  {actionLoading ? 'Actualizando...' : 'Actualizar Usuario'}
+                </button>
+              </div>
+            </form>
+          </motion.div>
+        </div>
+      )}
+
+      {/* Add Alias Modal */}
+      {showAddAliasModal && (
+        <div style={{ 
+          position: 'fixed', 
+          inset: 0, 
+          background: 'rgba(15, 23, 42, 0.4)', 
+          backdropFilter: 'blur(8px)',
+          display: 'flex', 
+          alignItems: 'center', 
+          justifyContent: 'center',
+          zIndex: 100
+        }}>
+          <motion.div 
+            initial={{ scale: 0.9, opacity: 0, y: 20 }}
+            animate={{ scale: 1, opacity: 1, y: 0 }}
+            className="card" 
+            style={{ width: '100%', maxWidth: '480px', padding: '2.5rem', border: 'none' }}
+          >
+            <h2 style={{ fontSize: '1.5rem', fontWeight: '800', marginBottom: '0.5rem', color: '#1e293b' }}>Nuevo Alias</h2>
+            <p style={{ color: '#64748b', fontSize: '0.875rem', marginBottom: '2rem' }}>Dirección virtual que redirige correos.</p>
+            
+            <form onSubmit={handleCreateAlias}>
+              <div className="input-group">
+                <label>Email Virtual</label>
+                <input 
+                  type="email" 
+                  className="input-control" 
+                  placeholder="ventas@mmbtransporte.com"
+                  value={newAlias.email}
+                  onChange={e => setNewAlias({...newAlias, email: e.target.value})}
+                  required
+                />
+              </div>
+              <div className="input-group">
+                <label>Destinatarios (separados por coma)</label>
+                <textarea 
+                  className="input-control" 
+                  placeholder="real1@mmbtransporte.com, real2@gmail.com"
+                  style={{ minHeight: '80px', padding: '0.75rem' }}
+                  value={newAlias.destinations}
+                  onChange={e => setNewAlias({...newAlias, destinations: e.target.value})}
+                  required={!newAlias.is_dynamic}
+                  disabled={newAlias.is_dynamic}
+                />
+                <p style={{ fontSize: '0.7rem', color: '#94a3b8', marginTop: '0.5rem' }}>
+                  {newAlias.is_dynamic ? 'Al ser dinámica, incluirá automáticamente a todos los buzones activos.' : 'Puedes poner buzones locales o correos externos.'}
+                </p>
+              </div>
+
+              <div style={{ display: 'flex', gap: '1.5rem', marginBottom: '2rem' }}>
+                <label style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', cursor: 'pointer', marginBottom: 0 }}>
+                  <input 
+                    type="checkbox" 
+                    checked={newAlias.is_dynamic}
+                    onChange={e => setNewAlias({...newAlias, is_dynamic: e.target.checked})}
+                    style={{ width: '16px', height: '16px' }}
+                  />
+                  <span style={{ fontSize: '0.875rem', color: '#475569' }}>Lista Dinámica (Todos)</span>
+                </label>
+              </div>
+              
+              <div style={{ display: 'flex', gap: '1rem', marginTop: '2rem' }}>
+                <button type="button" onClick={() => setShowAddAliasModal(false)} className="btn btn-secondary" style={{ flex: 1 }}>
+                  Cancelar
+                </button>
+                <button type="submit" className="btn btn-primary" disabled={actionLoading} style={{ flex: 1 }}>
+                  {actionLoading ? 'Guardando...' : 'Crear Alias'}
+                </button>
+              </div>
+            </form>
+          </motion.div>
+        </div>
+      )}
+
+      {/* Add Forwarding Modal */}
+      {showAddForwardingModal && (
+        <div style={{ 
+          position: 'fixed', 
+          inset: 0, 
+          background: 'rgba(15, 23, 42, 0.4)', 
+          backdropFilter: 'blur(8px)',
+          display: 'flex', 
+          alignItems: 'center', 
+          justifyContent: 'center',
+          zIndex: 100
+        }}>
+          <motion.div 
+            initial={{ scale: 0.9, opacity: 0, y: 20 }}
+            animate={{ scale: 1, opacity: 1, y: 0 }}
+            className="card" 
+            style={{ width: '100%', maxWidth: '480px', padding: '2.5rem', border: 'none' }}
+          >
+            <h2 style={{ fontSize: '1.5rem', fontWeight: '800', marginBottom: '0.5rem', color: '#1e293b' }}>Nuevo Reenvío (BCC)</h2>
+            <p style={{ color: '#64748b', fontSize: '0.875rem', marginBottom: '2rem' }}>Enviar copia oculta de correos salientes.</p>
+            
+            <form onSubmit={handleCreateForwardingRule}>
+              <div className="input-group">
+                <label>Buzón Emisor</label>
+                <input 
+                  type="email" 
+                  className="input-control" 
+                  placeholder="empleado@mmbtransporte.com"
+                  value={newForwarding.email}
+                  onChange={e => setNewForwarding({...newForwarding, email: e.target.value})}
+                  required
+                />
+              </div>
+              <div className="input-group">
+                <label>Enviar copia a</label>
+                <input 
+                  type="email" 
+                  className="input-control" 
+                  placeholder="supervisor@mmbtransporte.com"
+                  value={newForwarding.target}
+                  onChange={e => setNewForwarding({...newForwarding, target: e.target.value})}
+                  required
+                />
+              </div>
+              
+              <div style={{ display: 'flex', gap: '1rem', marginTop: '2rem' }}>
+                <button type="button" onClick={() => setShowAddForwardingModal(false)} className="btn btn-secondary" style={{ flex: 1 }}>
+                  Cancelar
+                </button>
+                <button type="submit" className="btn btn-primary" disabled={actionLoading} style={{ flex: 1 }}>
+                  {actionLoading ? 'Guardando...' : 'Crear Regla'}
+                </button>
+              </div>
+            </form>
           </motion.div>
         </div>
       )}

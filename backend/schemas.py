@@ -77,11 +77,67 @@ class SoopMailUserBase(BaseModel):
     email_count: Optional[int] = 0
     new_emails: Optional[int] = 0
     storage_size: Optional[str] = "0 B"
+    status: str = "active"
+    department: Optional[str] = None
+
+class SoopMailAlias(BaseModel):
+    email: str
+    destinations: List[str]
+    is_dynamic: bool = False
+    description: Optional[str] = None
+
+class SoopMailAliasCreate(BaseModel):
+    email: str
+    destinations: str # Comma separated
+    is_dynamic: bool = False
+    description: Optional[str] = None
+
+class ForwardingRule(BaseModel):
+    id: Optional[int] = None
+    email: str
+    target: str
+    direction: str = "both" # incoming, outgoing, both
+    active: bool = True
+
+class MailingList(BaseModel):
+    email: str
+    members: List[str]
+    is_dynamic: bool = True
+    allowed_senders: List[str] = ["*"] # * means everyone
+    subject: Optional[str] = None
+    body: Optional[str] = None
+    start_date: Optional[datetime] = None
+    end_date: Optional[datetime] = None
+
+class AutoResponderBase(BaseModel):
+    email: EmailStr
+    active: bool = False
+    subject: Optional[str] = None
+    body: Optional[str] = None
+    start_date: Optional[datetime] = None
+    end_date: Optional[datetime] = None
+
+class AutoResponderUpdate(BaseModel):
+    active: Optional[bool] = None
+    subject: Optional[str] = None
+    body: Optional[str] = None
+    start_date: Optional[datetime] = None
+    end_date: Optional[datetime] = None
+
+class AutoResponderOut(AutoResponderBase):
+    id: int
+    created_at: datetime
+    updated_at: datetime
+
+    class Config:
+        from_attributes = True
 
 class SoopMailUserCreate(BaseModel):
     email: EmailStr
     password: str
     password_confirm: str
+    status: str = "active"
+    department: Optional[str] = None
     restart_soop_mail: bool = True
 
     @field_validator("password")
@@ -99,26 +155,29 @@ class SoopMailUserCreate(BaseModel):
         return v
 
 class SoopMailUserUpdate(BaseModel):
-    password: str
-    password_confirm: str
+    password: Optional[str] = None
+    password_confirm: Optional[str] = None
+    status: Optional[str] = None
+    department: Optional[str] = None
     restart_soop_mail: bool = True
 
     @field_validator("password")
     @classmethod
-    def validate_password(cls, v: str) -> str:
-        if len(v) < 8:
+    def validate_password(cls, v: Optional[str]) -> Optional[str]:
+        if v and len(v) < 8:
             raise ValueError("La contraseña debe tener al menos 8 caracteres")
         return v
 
     @field_validator("password_confirm")
     @classmethod
-    def passwords_match(cls, v: str, info: ValidationInfo) -> str:
-        if "password" in info.data and v != info.data["password"]:
+    def passwords_match(cls, v: Optional[str], info: ValidationInfo) -> Optional[str]:
+        if v is not None and "password" in info.data and v != info.data["password"]:
             raise ValueError("Las contraseñas no coinciden")
         return v
 
 class UserPasswordChange(BaseModel):
     current_password: str
+    password_confirm: Optional[str] = None # For compatibility if needed
     new_password: str
     confirm_password: str
 
