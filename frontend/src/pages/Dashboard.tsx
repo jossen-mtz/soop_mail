@@ -56,12 +56,22 @@ const Dashboard: React.FC = () => {
     status: 'active',
     restart_soop_mail: true 
   });
-  const [showAddAliasModal, setShowAddAliasModal] = useState(false);
   const [newAlias, setNewAlias] = useState({ email: '', destinations: '', is_dynamic: false });
+  const [newForwarding, setNewForwarding] = useState({ email: '', target: '' });
+  const [showAddForwardingModal, setShowAddForwardingModal] = useState(false);
   const [recipientSearch, setRecipientSearch] = useState('');
   const [aliasSearch, setAliasSearch] = useState('');
   const [showRecipientList, setShowRecipientList] = useState(false);
   const [showAliasList, setShowAliasList] = useState(false);
+  const [activeSuggestionField, setActiveSuggestionField] = useState<string | null>(null);
+  
+  const DEFAULT_DOMAIN = 'mmbtransporte.com';
+
+  const ensureDomain = (val: string) => {
+    if (!val) return '';
+    if (val.includes('@')) return val;
+    return `${val}@${DEFAULT_DOMAIN}`;
+  };
   const [showViewModal, setShowViewModal] = useState(false);
   const [showEditModal, setShowEditModal] = useState(false);
   const [selectedMailUser, setSelectedMailUser] = useState<MailUser | null>(null);
@@ -2664,13 +2674,67 @@ const Dashboard: React.FC = () => {
                 </div>
                 
                 <input 
-                  type="email" 
+                  type="text" 
                   className="input-control" 
-                  placeholder="ventas@mmbtransporte.com"
+                  placeholder={`ejemplo@${DEFAULT_DOMAIN}`}
                   value={newAlias.email}
-                  onChange={e => setNewAlias({...newAlias, email: e.target.value})}
+                  onChange={e => {
+                    const val = e.target.value;
+                    setNewAlias({...newAlias, email: val});
+                    setActiveSuggestionField('alias-email');
+                  }}
+                  onBlur={() => {
+                    setNewAlias({...newAlias, email: ensureDomain(newAlias.email)});
+                    setTimeout(() => setActiveSuggestionField(null), 200);
+                  }}
+                  onFocus={() => setActiveSuggestionField('alias-email')}
                   required
                 />
+
+                {activeSuggestionField === 'alias-email' && (
+                  <div className="card" style={{ 
+                    position: 'absolute', 
+                    top: '100%', 
+                    left: 0, 
+                    right: 0, 
+                    zIndex: 1000, 
+                    marginTop: '0.25rem',
+                    maxHeight: '200px',
+                    overflowY: 'auto',
+                    padding: '0.5rem',
+                    boxShadow: '0 10px 15px -3px rgba(0, 0, 0, 0.1)'
+                  }}>
+                    {aliases
+                      .filter(a => a.email.toLowerCase().includes(newAlias.email.toLowerCase()) || newAlias.email === '')
+                      .map(a => (
+                        <div 
+                          key={a.email}
+                          onClick={() => setNewAlias({...newAlias, email: a.email})}
+                          style={{ 
+                            padding: '0.75rem', 
+                            cursor: 'pointer', 
+                            borderRadius: '0.5rem',
+                            fontSize: '0.875rem',
+                            display: 'flex',
+                            alignItems: 'center',
+                            gap: '0.5rem',
+                            transition: 'background 0.2s'
+                          }}
+                          onMouseOver={e => (e.currentTarget.style.background = '#f1f5f9')}
+                          onMouseOut={e => (e.currentTarget.style.background = 'transparent')}
+                        >
+                          <Mail size={14} style={{ color: '#64748b' }} />
+                          {a.email}
+                        </div>
+                      ))
+                    }
+                    {aliases.filter(a => a.email.toLowerCase().includes(newAlias.email.toLowerCase())).length === 0 && (
+                      <div style={{ padding: '0.75rem', fontSize: '0.875rem', color: '#94a3b8', textAlign: 'center' }}>
+                        Sin coincidencias
+                      </div>
+                    )}
+                  </div>
+                )}
 
                 {showAliasList && (
                   <div style={{ 
@@ -2845,35 +2909,121 @@ const Dashboard: React.FC = () => {
             <p style={{ color: '#64748b', fontSize: '0.875rem', marginBottom: '2rem' }}>Enviar copia oculta de correos salientes.</p>
             
             <form onSubmit={handleCreateForwardingRule}>
-              <div className="input-group">
+              <div className="input-group" style={{ position: 'relative' }}>
                 <label>Buzón Emisor</label>
                 <input 
-                  type="email" 
+                  type="text" 
                   className="input-control" 
-                  placeholder="empleado@mmbtransporte.com"
+                  placeholder={`usuario@${DEFAULT_DOMAIN}`}
                   value={newForwarding.email}
-                  onChange={e => setNewForwarding({...newForwarding, email: e.target.value})}
+                  onChange={e => {
+                    setNewForwarding({...newForwarding, email: e.target.value});
+                    setActiveSuggestionField('forward-email');
+                  }}
+                  onBlur={() => {
+                    setNewForwarding({...newForwarding, email: ensureDomain(newForwarding.email)});
+                    setTimeout(() => setActiveSuggestionField(null), 200);
+                  }}
+                  onFocus={() => setActiveSuggestionField('forward-email')}
                   required
-                  list="mail-user-suggestions"
                 />
+                {activeSuggestionField === 'forward-email' && (
+                  <div className="card" style={{ 
+                    position: 'absolute', 
+                    top: '100%', 
+                    left: 0, 
+                    right: 0, 
+                    zIndex: 1000, 
+                    marginTop: '0.25rem',
+                    maxHeight: '200px',
+                    overflowY: 'auto',
+                    padding: '0.5rem',
+                    boxShadow: '0 10px 15px -3px rgba(0, 0, 0, 0.1)'
+                  }}>
+                    {mailUsers
+                      .filter(u => u.email.toLowerCase().includes(newForwarding.email.toLowerCase()) || newForwarding.email === '')
+                      .map(u => (
+                        <div 
+                          key={u.email}
+                          onClick={() => setNewForwarding({...newForwarding, email: u.email})}
+                          style={{ 
+                            padding: '0.75rem', 
+                            cursor: 'pointer', 
+                            borderRadius: '0.5rem',
+                            fontSize: '0.875rem',
+                            display: 'flex',
+                            alignItems: 'center',
+                            gap: '0.5rem',
+                            transition: 'background 0.2s'
+                          }}
+                          onMouseOver={e => (e.currentTarget.style.background = '#f1f5f9')}
+                          onMouseOut={e => (e.currentTarget.style.background = 'transparent')}
+                        >
+                          <Users size={14} style={{ color: '#64748b' }} />
+                          {u.email}
+                        </div>
+                      ))
+                    }
+                  </div>
+                )}
               </div>
-              <div className="input-group">
+              <div className="input-group" style={{ position: 'relative' }}>
                 <label>Enviar copia a</label>
                 <input 
-                  type="email" 
+                  type="text" 
                   className="input-control" 
-                  placeholder="supervisor@mmbtransporte.com"
+                  placeholder={`supervisor@${DEFAULT_DOMAIN}`}
                   value={newForwarding.target}
-                  onChange={e => setNewForwarding({...newForwarding, target: e.target.value})}
+                  onChange={e => {
+                    setNewForwarding({...newForwarding, target: e.target.value});
+                    setActiveSuggestionField('forward-target');
+                  }}
+                  onBlur={() => {
+                    setNewForwarding({...newForwarding, target: ensureDomain(newForwarding.target)});
+                    setTimeout(() => setActiveSuggestionField(null), 200);
+                  }}
+                  onFocus={() => setActiveSuggestionField('forward-target')}
                   required
-                  list="mail-user-suggestions"
                 />
-                <datalist id="mail-user-suggestions">
-                  {mailUsers.map(u => (
-                    <option key={u.email} value={u.email} />
-                  ))}
-                </datalist>
-              </div>
+                {activeSuggestionField === 'forward-target' && (
+                  <div className="card" style={{ 
+                    position: 'absolute', 
+                    top: '100%', 
+                    left: 0, 
+                    right: 0, 
+                    zIndex: 1000, 
+                    marginTop: '0.25rem',
+                    maxHeight: '200px',
+                    overflowY: 'auto',
+                    padding: '0.5rem',
+                    boxShadow: '0 10px 15px -3px rgba(0, 0, 0, 0.1)'
+                  }}>
+                    {mailUsers
+                      .filter(u => u.email.toLowerCase().includes(newForwarding.target.toLowerCase()) || newForwarding.target === '')
+                      .map(u => (
+                        <div 
+                          key={u.email}
+                          onClick={() => setNewForwarding({...newForwarding, target: u.email})}
+                          style={{ 
+                            padding: '0.75rem', 
+                            cursor: 'pointer', 
+                            borderRadius: '0.5rem',
+                            fontSize: '0.875rem',
+                            display: 'flex',
+                            alignItems: 'center',
+                            gap: '0.5rem',
+                            transition: 'background 0.2s'
+                          }}
+                          onMouseOver={e => (e.currentTarget.style.background = '#f1f5f9')}
+                          onMouseOut={e => (e.currentTarget.style.background = 'transparent')}
+                        >
+                          <Users size={14} style={{ color: '#64748b' }} />
+                          {u.email}
+                        </div>
+                      ))
+                    }
+                  </div>
+                )}
               
               <div style={{ display: 'flex', gap: '1rem', marginTop: '2rem' }}>
                 <button type="button" onClick={() => setShowAddForwardingModal(false)} className="btn btn-secondary" style={{ flex: 1 }}>
