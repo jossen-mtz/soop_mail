@@ -383,10 +383,12 @@ const Dashboard: React.FC = () => {
 
   useEffect(() => {
     fetchMailUsers();
-    fetchSystemUsers();
+    if (user?.is_admin) {
+      fetchSystemUsers();
+      fetchAuditLogs();
+    }
     fetchMailAliases();
     fetchForwardingRules();
-    fetchAuditLogs();
     fetchSystemStatus();
     if (activeTab === 'settings') {
       document.title = 'Configuración | soop MAIL';

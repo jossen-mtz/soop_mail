@@ -1136,7 +1136,11 @@ def get_mail_logs(lines: int = 100, current_user: models.User = Depends(auth.get
         return {"logs": [f"Error de sistema: {str(e)}"]}
 
 @app.get("/api/system/logs/mail/auth")
-def get_auth_logs(lines: int = 100, email: Optional[str] = None, current_user: models.User = Depends(auth.get_current_admin_user)):
+def get_auth_logs(lines: int = 100, email: Optional[str] = None, current_user: models.User = Depends(auth.get_current_active_user)):
+    # Restricción: Si no es admin, DEBE proporcionar un email para filtrar
+    if not current_user.is_admin and not email:
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Not enough permissions")
+        
     log_paths = ['/var/log/mail.log', '/var/log/mail.err', '/var/log/mail.info']
     target_log = None
     for path in log_paths:
