@@ -5,7 +5,7 @@ pymysql
 python-jose[cryptography]
 passlib[bcrypt]
 python-multipart
-pydantic
+pydantic[email]
+email-validator
 pydantic-settings
 python-dotenv
-

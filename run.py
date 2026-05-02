@@ -17,7 +17,13 @@ def run_command(command, cwd, wait=False):
     )
 
 def main():
-    print("Preparando sistema soop MAIL (Puerto Unico)...")
+    import argparse
+    parser = argparse.ArgumentParser(description="Gestor de soop MAIL")
+    parser.add_argument("--env", choices=["dev", "prod"], default="dev", help="Ambiente de ejecución (dev o prod)")
+    args = parser.parse_args()
+
+    os.environ["APP_ENV"] = args.env
+    print(f"Preparando sistema soop MAIL en ambiente: {args.env.upper()}")
     
     base_dir = os.path.dirname(os.path.abspath(__file__))
     backend_dir = os.path.join(base_dir, "backend")

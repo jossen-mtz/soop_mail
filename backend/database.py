@@ -2,12 +2,10 @@ import os
 from sqlalchemy import create_engine
 from sqlalchemy.ext.declarative import declarative_base
 from sqlalchemy.orm import sessionmaker
-from dotenv import load_dotenv
-
-load_dotenv(os.path.join(os.path.dirname(__file__), '.env'), override=True)
+import config
 
 # MySQL URL: mysql+pymysql://user:password@host:port/dbname
-SQLALCHEMY_DATABASE_URL = os.getenv("DATABASE_URL", "mysql+pymysql://root:@localhost/soop_mail")
+SQLALCHEMY_DATABASE_URL = config.DATABASE_URL
 
 engine = create_engine(
     SQLALCHEMY_DATABASE_URL,

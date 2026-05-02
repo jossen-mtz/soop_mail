@@ -644,12 +644,22 @@ const Dashboard: React.FC = () => {
                         </div>
                         <div style={{ borderTop: '1px solid #f1f5f9', paddingTop: '1rem' }}>
                           <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '0.813rem', marginBottom: '0.5rem' }}>
-                            <span style={{ color: '#64748b' }}>Uptime:</span>
-                            <span style={{ fontWeight: '600', color: '#1e293b' }}>{systemStatus?.details?.uptime || 'N/A'}</span>
+                            <span style={{ color: '#64748b' }}>Postfix (MTA):</span>
+                            <span style={{ 
+                              fontWeight: '700', 
+                              color: systemStatus?.details?.postfix_active ? '#16a34a' : '#dc2626' 
+                            }}>
+                              {systemStatus?.details?.postfix_active ? 'En ejecución' : 'Detenido'}
+                            </span>
                           </div>
                           <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '0.813rem' }}>
-                            <span style={{ color: '#64748b' }}>Hora del Sistema:</span>
-                            <span style={{ fontWeight: '600', color: '#1e293b' }}>{systemStatus?.details?.current_time}</span>
+                            <span style={{ color: '#64748b' }}>Dovecot (IMAP):</span>
+                            <span style={{ 
+                              fontWeight: '700', 
+                              color: systemStatus?.details?.dovecot_active ? '#16a34a' : '#dc2626' 
+                            }}>
+                              {systemStatus?.details?.dovecot_active ? 'En ejecución' : 'Detenido'}
+                            </span>
                           </div>
                         </div>
                       </div>
@@ -712,38 +722,96 @@ const Dashboard: React.FC = () => {
                       </div>
                     </div>
 
-                    <div className="card" style={{ padding: '1.5rem' }}>
-                      <h4 style={{ fontSize: '1rem', fontWeight: '700', color: '#1e293b', marginBottom: '1.25rem', display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
-                        <Activity size={18} style={{ color: '#4f46e5' }} />
-                        Información Técnica
-                      </h4>
-                      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(240px, 1fr))', gap: '1.5rem' }}>
-                        <div style={{ display: 'flex', flexDirection: 'column', gap: '0.75rem' }}>
-                          <div style={{ fontSize: '0.813rem' }}>
-                            <div style={{ color: '#64748b', marginBottom: '0.25rem' }}>Sistema Operativo</div>
-                            <div style={{ fontWeight: '600', color: '#1e293b' }}>{systemStatus?.details?.os} {systemStatus?.details?.release}</div>
+                    <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '1.5rem' }}>
+                      <div className="card" style={{ padding: '1.5rem' }}>
+                        <h4 style={{ fontSize: '1rem', fontWeight: '700', color: '#1e293b', marginBottom: '1.25rem', display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+                          <CheckCircle size={18} style={{ color: '#4f46e5' }} />
+                          Verificación de Postfix
+                        </h4>
+                        <div style={{ 
+                          background: systemStatus?.details?.postfix_config_ok ? '#f0fdf4' : '#fef2f2', 
+                          border: `1px solid ${systemStatus?.details?.postfix_config_ok ? '#bbf7d0' : '#fecaca'}`,
+                          padding: '1rem',
+                          borderRadius: '0.75rem',
+                          marginBottom: '1rem'
+                        }}>
+                          <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', marginBottom: '0.5rem' }}>
+                            {systemStatus?.details?.postfix_config_ok ? (
+                              <CheckCircle size={16} color="#16a34a" />
+                            ) : (
+                              <AlertCircle size={16} color="#dc2626" />
+                            )}
+                            <span style={{ fontWeight: '700', fontSize: '0.875rem', color: systemStatus?.details?.postfix_config_ok ? '#166534' : '#991b1b' }}>
+                              {systemStatus?.details?.postfix_config_ok ? 'Configuración Correcta' : 'Error en Configuración'}
+                            </span>
                           </div>
-                          <div style={{ fontSize: '0.813rem' }}>
-                            <div style={{ color: '#64748b', marginBottom: '0.25rem' }}>Versión de Kernel</div>
-                            <div style={{ fontWeight: '600', color: '#1e293b', fontSize: '0.75rem' }}>{systemStatus?.details?.version}</div>
-                          </div>
-                          <div style={{ fontSize: '0.813rem' }}>
-                            <div style={{ color: '#64748b', marginBottom: '0.25rem' }}>Arquitectura</div>
-                            <div style={{ fontWeight: '600', color: '#1e293b' }}>{systemStatus?.details?.machine}</div>
-                          </div>
+                          <code style={{ fontSize: '0.75rem', display: 'block', maxHeight: '100px', overflowY: 'auto', whiteSpace: 'pre-wrap', color: systemStatus?.details?.postfix_config_ok ? '#166534' : '#991b1b' }}>
+                            {systemStatus?.details?.postfix_config_ok ? 'Postfix check passed without warnings.' : systemStatus?.details?.postfix_config_error}
+                          </code>
                         </div>
-                        <div style={{ display: 'flex', flexDirection: 'column', gap: '0.75rem' }}>
-                          <div style={{ fontSize: '0.813rem' }}>
-                            <div style={{ color: '#64748b', marginBottom: '0.25rem' }}>Python Version</div>
-                            <div style={{ fontWeight: '600', color: '#1e293b' }}>{systemStatus?.details?.python_version}</div>
+                      </div>
+
+                      <div className="card" style={{ padding: '1.5rem' }}>
+                        <h4 style={{ fontSize: '1rem', fontWeight: '700', color: '#1e293b', marginBottom: '1.25rem', display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+                          <CheckCircle size={18} style={{ color: '#4f46e5' }} />
+                          Verificación de Dovecot
+                        </h4>
+                        <div style={{ 
+                          background: systemStatus?.details?.dovecot_config_ok ? '#f0fdf4' : '#fef2f2', 
+                          border: `1px solid ${systemStatus?.details?.dovecot_config_ok ? '#bbf7d0' : '#fecaca'}`,
+                          padding: '1rem',
+                          borderRadius: '0.75rem',
+                          marginBottom: '1rem'
+                        }}>
+                          <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', marginBottom: '0.5rem' }}>
+                            {systemStatus?.details?.dovecot_config_ok ? (
+                              <CheckCircle size={16} color="#16a34a" />
+                            ) : (
+                              <AlertCircle size={16} color="#dc2626" />
+                            )}
+                            <span style={{ fontWeight: '700', fontSize: '0.875rem', color: systemStatus?.details?.dovecot_config_ok ? '#166534' : '#991b1b' }}>
+                              {systemStatus?.details?.dovecot_config_ok ? 'Configuración Correcta' : 'Error en Configuración'}
+                            </span>
                           </div>
-                          <div style={{ fontSize: '0.813rem' }}>
-                            <div style={{ color: '#64748b', marginBottom: '0.25rem' }}>Ruta de Usuarios</div>
-                            <code style={{ fontSize: '0.7rem', color: '#475569', background: '#f8fafc', padding: '2px 4px', borderRadius: '4px' }}>{systemStatus?.details?.users_file}</code>
+                          <code style={{ fontSize: '0.75rem', display: 'block', maxHeight: '100px', overflowY: 'auto', whiteSpace: 'pre-wrap', color: systemStatus?.details?.dovecot_config_ok ? '#166534' : '#991b1b' }}>
+                            {systemStatus?.details?.dovecot_config_ok ? 'Dovecot config check passed.' : systemStatus?.details?.dovecot_config_error}
+                          </code>
+                        </div>
+                      </div>
+
+                      <div className="card" style={{ padding: '1.5rem', gridColumn: 'span 2' }}>
+                        <h4 style={{ fontSize: '1rem', fontWeight: '700', color: '#1e293b', marginBottom: '1.25rem', display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+                          <Activity size={18} style={{ color: '#4f46e5' }} />
+                          Información Técnica
+                        </h4>
+                        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(240px, 1fr))', gap: '1.5rem' }}>
+                          <div style={{ display: 'flex', flexDirection: 'column', gap: '0.75rem' }}>
+                            <div style={{ fontSize: '0.813rem' }}>
+                              <div style={{ color: '#64748b', marginBottom: '0.25rem' }}>Sistema Operativo</div>
+                              <div style={{ fontWeight: '600', color: '#1e293b' }}>{systemStatus?.details?.os} {systemStatus?.details?.release}</div>
+                            </div>
+                            <div style={{ fontSize: '0.813rem' }}>
+                              <div style={{ color: '#64748b', marginBottom: '0.25rem' }}>Versión de Kernel</div>
+                              <div style={{ fontWeight: '600', color: '#1e293b', fontSize: '0.75rem' }}>{systemStatus?.details?.version}</div>
+                            </div>
+                            <div style={{ fontSize: '0.813rem' }}>
+                              <div style={{ color: '#64748b', marginBottom: '0.25rem' }}>Uptime</div>
+                              <div style={{ fontWeight: '600', color: '#1e293b' }}>{systemStatus?.details?.uptime || 'N/A'}</div>
+                            </div>
                           </div>
-                          <div style={{ fontSize: '0.813rem' }}>
-                            <div style={{ color: '#64748b', marginBottom: '0.25rem' }}>Base de Correos</div>
-                            <code style={{ fontSize: '0.7rem', color: '#475569', background: '#f8fafc', padding: '2px 4px', borderRadius: '4px' }}>{systemStatus?.details?.mail_base}</code>
+                          <div style={{ display: 'flex', flexDirection: 'column', gap: '0.75rem' }}>
+                            <div style={{ fontSize: '0.813rem' }}>
+                              <div style={{ color: '#64748b', marginBottom: '0.25rem' }}>Python Version</div>
+                              <div style={{ fontWeight: '600', color: '#1e293b' }}>{systemStatus?.details?.python_version}</div>
+                            </div>
+                            <div style={{ fontSize: '0.813rem' }}>
+                              <div style={{ color: '#64748b', marginBottom: '0.25rem' }}>Ruta de Usuarios</div>
+                              <code style={{ fontSize: '0.7rem', color: '#475569', background: '#f8fafc', padding: '2px 4px', borderRadius: '4px' }}>{systemStatus?.details?.users_file}</code>
+                            </div>
+                            <div style={{ fontSize: '0.813rem' }}>
+                              <div style={{ color: '#64748b', marginBottom: '0.25rem' }}>Base de Correos</div>
+                              <code style={{ fontSize: '0.7rem', color: '#475569', background: '#f8fafc', padding: '2px 4px', borderRadius: '4px' }}>{systemStatus?.details?.mail_base}</code>
+                            </div>
                           </div>
                         </div>
                       </div>

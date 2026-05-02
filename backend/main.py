@@ -13,6 +13,7 @@ from fastapi.responses import FileResponse
 from sqlalchemy.orm import Session
 from tempfile import NamedTemporaryFile
 
+import config
 import models, schemas, auth, database
 from database import engine, get_db
 
@@ -393,14 +394,50 @@ async def delete_mail_user(
 @app.get("/api/system/status", response_model=schemas.SystemStatus)
 async def get_system_status(current_user: models.User = Depends(auth.get_current_active_user)):
     service_active = False
+    postfix_active = False
+    dovecot_active = False
+    postfix_config_ok = True
+    postfix_config_error = ""
+    dovecot_config_ok = True
+    dovecot_config_error = ""
+    
     try:
         if os.name != 'nt':
+            # Main soop-mail service
             result = subprocess.run(['systemctl', 'is-active', 'soop-mail'], capture_output=True, text=True)
             service_active = result.stdout.strip() == 'active'
+            
+            # Postfix service
+            result = subprocess.run(['systemctl', 'is-active', 'postfix'], capture_output=True, text=True)
+            postfix_active = result.stdout.strip() == 'active'
+            
+            # Dovecot service
+            result = subprocess.run(['systemctl', 'is-active', 'dovecot'], capture_output=True, text=True)
+            dovecot_active = result.stdout.strip() == 'active'
+            
+            # Verify Postfix configuration
+            pf_check = subprocess.run(['postfix', 'check'], capture_output=True, text=True)
+            if pf_check.returncode != 0:
+                postfix_config_ok = False
+                postfix_config_error = pf_check.stderr.strip()
+                
+            # Verify Dovecot configuration
+            dv_check = subprocess.run(['doveadm', 'config'], capture_output=True, text=True)
+            if dv_check.returncode != 0:
+                dovecot_config_ok = False
+                dovecot_config_error = dv_check.stderr.strip()
         else:
-            service_active = True # Mock for Windows dev
-    except:
+            # Mock for Windows dev
+            service_active = True
+            postfix_active = True
+            dovecot_active = True
+            postfix_config_ok = True
+            dovecot_config_error = "No errors detected (Mock)"
+            dovecot_config_ok = True
+            dovecot_config_error = "No errors detected (Mock)"
+    except Exception as e:
         service_active = False
+        postfix_config_error = str(e)
         
     users = read_users_file()
     total_emails = sum(count_emails(u['home']) for u in users)
@@ -416,7 +453,13 @@ async def get_system_status(current_user: models.User = Depends(auth.get_current
         "users_file": USERS_FILE,
         "current_time": datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
         "total_emails": total_emails,
-        "mail_base_size": format_size(mail_base_size)
+        "mail_base_size": format_size(mail_base_size),
+        "postfix_active": postfix_active,
+        "dovecot_active": dovecot_active,
+        "postfix_config_ok": postfix_config_ok,
+        "postfix_config_error": postfix_config_error,
+        "dovecot_config_ok": dovecot_config_ok,
+        "dovecot_config_error": dovecot_config_error
     }
     
     if os.name != 'nt':

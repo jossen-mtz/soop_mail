@@ -2,9 +2,7 @@ from sqlalchemy.orm import Session
 from database import SessionLocal, engine
 import models, auth
 import os
-from dotenv import load_dotenv
-
-load_dotenv(os.path.join(os.path.dirname(__file__), '.env'), override=True)
+import config
 
 def init_db():
     models.Base.metadata.create_all(bind=engine)
