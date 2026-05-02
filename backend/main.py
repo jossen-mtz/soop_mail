@@ -128,6 +128,12 @@ def get_mailbox_stats(mail_dir: str):
     if not actual_path:
         return 0, 0, "0 B", mail_dir
         
+    try:
+        content = os.listdir(actual_path)
+        print(f"DEBUG: Directory {actual_path} contains: {content}")
+    except Exception as e:
+        print(f"DEBUG: Could not list {actual_path}: {str(e)}")
+
     total = 0
     new = 0
     size_bytes = 0
@@ -135,26 +141,33 @@ def get_mailbox_stats(mail_dir: str):
     # Exclude list for non-email files
     exclude = ['dovecot', 'subscriptions', 'maildirfolder', 'maildirsize']
     
+    walk_visited = False
     try:
         for root, dirs, files in os.walk(actual_path):
+            walk_visited = True
             # Check if we are inside a 'new' folder for Maildir
             is_new_dir = os.path.basename(root) == 'new'
             for file in files:
-                # Basic filter to exclude Dovecot metadata, but include everything else
+                # Basic filter to exclude Dovecot metadata
                 if any(file.startswith(ex) for ex in exclude):
                     continue
                     
-                fp = os.path.join(root, file)
                 total += 1
                 if is_new_dir:
                     new += 1
                 try:
+                    fp = os.path.join(root, file)
                     if not os.path.islink(fp):
                         size_bytes += os.path.getsize(fp)
                 except:
                     pass
+                    
+        if not walk_visited:
+            print(f"DEBUG: os.walk could not enter {actual_path} (Check permissions)")
+        else:
+            print(f"DEBUG: Found {total} emails in {actual_path}")
     except Exception as e:
-        print(f"Error getting mailbox stats in {actual_path}: {str(e)}")
+        print(f"Error walking {actual_path}: {str(e)}")
         
     return total, new, format_size(size_bytes), actual_path
 
@@ -431,9 +444,11 @@ async def delete_system_user(
 @app.get("/api/mail/users", response_model=List[schemas.SoopMailUserBase])
 async def get_mail_users(current_user: models.User = Depends(auth.get_current_active_user)):
     users = read_users_file()
+    print(f"DEBUG: Found {len(users)} users in file. Starting stats calculation...")
     result = []
     for u in users:
         total, new, size, actual_path = get_mailbox_stats(u['home'])
+        print(f"DEBUG: User {u['email']} -> {total} emails found at {actual_path}")
         result.append({
             "email": u['email'],
             "uid": u['uid'],
