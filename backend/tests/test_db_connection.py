@@ -30,7 +30,7 @@ def test_manual_tcp():
     db_pass = os.getenv("MYSQL_PASSWORD", "")
     db_host = os.getenv("MYSQL_HOST", "localhost")
     db_port = os.getenv("MYSQL_PORT", "3306")
-    db_name = os.getenv("MYSQL_DATABASE", "soop_mail")
+    db_name = os.getenv("MYSQL_DATABASE", "soop_mail_admin")
     
     url = f"mysql+pymysql://{db_user}:{db_pass}@{db_host}:{db_port}/{db_name}"
     print(f"Intentando conectar a: {db_host}:{db_port}...")
@@ -50,7 +50,7 @@ def test_manual_socket():
     db_socket = os.getenv("MYSQL_UNIX_SOCKET", "/var/run/mysqld/mysqld.sock")
     db_user = os.getenv("MYSQL_USER", "root")
     db_pass = os.getenv("MYSQL_PASSWORD", "")
-    db_name = os.getenv("MYSQL_DATABASE", "soop_mail")
+    db_name = os.getenv("MYSQL_DATABASE", "soop_mail_admin")
     
     if not os.path.exists(db_socket):
         print(f"[SALTADO] El archivo de socket no existe en: {db_socket}")
