@@ -96,6 +96,28 @@ const Dashboard: React.FC = () => {
     }
   };
 
+  const handlePurgeMailbox = async (email: string) => {
+    setDeleteConfig({
+      title: '¿Vaciar buzón de correo?',
+      message: `Esta acción eliminará TODOS los correos de ${email}. Esta acción es irreversible y no se podrá recuperar la información.`,
+      onConfirm: async () => {
+        setActionLoading(true);
+        try {
+          const response = await api.post(`/api/mail/users/${email}/purge`);
+          showNotification(response.data.message, 'success');
+          fetchMailUsers();
+          setShowViewModal(false);
+        } catch (err: any) {
+          showNotification(err.response?.data?.detail || 'Error al vaciar buzón', 'error');
+        } finally {
+          setActionLoading(false);
+          setShowDeleteConfirm(false);
+        }
+      }
+    });
+    setShowDeleteConfirm(true);
+  };
+
   const fetchAuditLogs = async () => {
     try {
       const response = await api.get('/api/system/logs');
@@ -1464,8 +1486,25 @@ const Dashboard: React.FC = () => {
               </div>
             </div>
             
-            <div style={{ display: 'flex', marginTop: '2.5rem' }}>
-              <button onClick={() => setShowViewModal(false)} className="btn btn-secondary" style={{ width: '100%' }}>Cerrar</button>
+            <div style={{ display: 'flex', gap: '1rem', marginTop: '2.5rem' }}>
+              <button 
+                onClick={() => handlePurgeMailbox(selectedMailUser.email)} 
+                className="btn btn-secondary" 
+                style={{ 
+                  flex: 1, 
+                  background: '#fff1f2', 
+                  color: '#be123c', 
+                  borderColor: '#fecdd3',
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  gap: '0.5rem'
+                }}
+              >
+                <Trash2 size={16} />
+                Vaciar Buzón
+              </button>
+              <button onClick={() => setShowViewModal(false)} className="btn btn-secondary" style={{ flex: 1 }}>Cerrar</button>
             </div>
           </motion.div>
         </div>

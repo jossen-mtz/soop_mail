@@ -460,6 +460,55 @@ async def get_mail_users(current_user: models.User = Depends(auth.get_current_ac
         })
     return result
 
+@app.post("/api/mail/users/{email}/purge")
+async def purge_mailbox(
+    email: str,
+    request: Request,
+    current_user: models.User = Depends(auth.get_current_active_user),
+    db: Session = Depends(get_db)
+):
+    users = read_users_file()
+    user = next((u for u in users if u['email'] == email), None)
+    if not user:
+        raise HTTPException(status_code=404, detail="User not found")
+        
+    parts = email.split('@')
+    username = parts[0]
+    domain = parts[1]
+    
+    MAILBOX_BASES = ["/var/mail/vhosts", "/var/mail/soop_mail"]
+    purged_count = 0
+    
+    for base in MAILBOX_BASES:
+        mailbox_path = os.path.join(base, domain, username)
+        if not os.path.exists(mailbox_path):
+            continue
+            
+        try:
+            for root, dirs, files in os.walk(mailbox_path):
+                # Solo borrar archivos en cur, new y tmp
+                if os.path.basename(root) in ("cur", "new", "tmp"):
+                    for file in files:
+                        file_path = os.path.join(root, file)
+                        try:
+                            os.remove(file_path)
+                            purged_count += 1
+                        except:
+                            pass
+                # También borrar archivos de índice de Dovecot
+                for file in files:
+                    if file.startswith("dovecot"):
+                        try:
+                            os.remove(os.path.join(root, file))
+                        except:
+                            pass
+        except Exception as e:
+            print(f"Error purging {mailbox_path}: {str(e)}")
+            
+    log_audit(db, current_user.id, "PURGE_MAILBOX", "MailUser", email, f"Purged {purged_count} emails from {email}", request=request)
+    
+    return {"message": f"Buzón vaciado con éxito. Se eliminaron {purged_count} correos.", "count": purged_count}
+
 @app.post("/api/mail/users", status_code=status.HTTP_201_CREATED)
 async def create_mail_user(
     user_data: schemas.SoopMailUserCreate, 
