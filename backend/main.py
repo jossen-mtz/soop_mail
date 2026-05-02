@@ -73,6 +73,7 @@ MAIL_BASE = os.getenv("SOOP_MAIL_BASE", "/var/mail/vhosts")
 POSTFIX_VMAILBOX = os.getenv("POSTFIX_VMAILBOX", "/etc/postfix/vmailbox")
 VMAIL_UID = int(os.getenv("SOOP_MAIL_VMAIL_UID", 5000))
 VMAIL_GID = int(os.getenv("SOOP_MAIL_VMAIL_GID", 5000))
+DEFAULT_DOMAIN = os.getenv("DEFAULT_DOMAIN", "mmbtransporte.com")
 
 # Path to static files
 STATIC_DIR = os.path.join(os.path.dirname(os.path.abspath(__file__)), "static")
@@ -209,23 +210,24 @@ def update_postfix_vmailbox(users: List[dict]):
         with NamedTemporaryFile('w', dir=postfix_dir, delete=False) as tmp:
             temp_path = tmp.name
             for user in users:
-                # Format: user@domain.com  domain.com/user/
+                # Format: user@domain.com  domain/user/Maildir/
                 email = user['email']
                 domain = email.split('@')[1]
                 username = email.split('@')[0]
-                # Note: Postfix usually expects the relative path from virtual_mailbox_base
-                line = f"{email} {domain}/{username}/\n"
+                # Mimic the user script format
+                line = f"{email}    {domain}/{username}/Maildir/\n"
                 tmp.write(line)
         
         if os.name != 'nt':
             os.chmod(temp_path, 0o644)
         shutil.move(temp_path, POSTFIX_VMAILBOX)
         
-        # Run postmap
+        # Run postmap and reload postfix
         try:
             subprocess.run(['postmap', POSTFIX_VMAILBOX], check=True)
+            subprocess.run(['postfix', 'reload'], check=True)
         except Exception as e:
-            print(f"Warning: Could not run postmap: {str(e)}")
+            print(f"Warning: Could not update postfix: {str(e)}")
             
         return True
     except Exception as e:
@@ -238,7 +240,8 @@ def write_users_file(users: List[dict]):
         with NamedTemporaryFile('w', dir=users_dir, delete=False) as tmp:
             temp_path = tmp.name
             for user in users:
-                line = f"{user['email']}:{user['hash']}:{user['uid']}:{user['gid']}:{user['gecos']}:{user['home']}:{user['shell']}\n"
+                # Format: usuario@dominio:{HASH}:uid:gid::home_dir:
+                line = f"{user['email']}:{user['hash']}:{user['uid']}:{user['gid']}::{user['home']}:\n"
                 tmp.write(line)
         
         if os.name != 'nt':
@@ -248,6 +251,12 @@ def write_users_file(users: List[dict]):
         # Also update Postfix vmailbox to keep them in sync
         update_postfix_vmailbox(users)
         
+        # Reload Dovecot
+        try:
+            subprocess.run(['systemctl', 'reload', 'dovecot'], check=True)
+        except:
+            pass
+            
         return True
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Error writing users file: {str(e)}")
@@ -440,14 +449,23 @@ async def create_mail_user(
     
     domain = user_data.email.split('@')[1]
     username = user_data.email.split('@')[0]
-    mail_dir = os.path.join(MAIL_BASE, domain, username)
+    # Path following the user script: MAIL_BASE/domain/username
+    user_home = os.path.join(MAIL_BASE, domain, username)
+    maildir_path = os.path.join(user_home, "Maildir")
     
-    # Create directory logic
+    # Create directory logic: Maildir/{new,cur,tmp}
     try:
-        os.makedirs(mail_dir, exist_ok=True)
+        for d in ['new', 'cur', 'tmp']:
+            os.makedirs(os.path.join(maildir_path, d), exist_ok=True)
+            
         if os.name != 'nt':
-            os.chmod(mail_dir, 0o770)
-            # In a real system, you'd chown here if running as root
+            # chown -R vmail:vmail
+            try:
+                # Use sh to run chown recursively safely
+                subprocess.run(['chown', '-R', f"{VMAIL_UID}:{VMAIL_GID}", user_home], check=True)
+                subprocess.run(['chmod', '-R', '700', user_home], check=True)
+            except Exception as e:
+                print(f"Warning: Could not set permissions: {str(e)}")
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Error creating mail directory: {str(e)}")
     
@@ -457,7 +475,7 @@ async def create_mail_user(
         'uid': str(VMAIL_UID),
         'gid': str(VMAIL_GID),
         'gecos': '',
-        'home': mail_dir,
+        'home': user_home,
         'shell': ''
     }
     users.append(new_user)
