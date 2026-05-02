@@ -3024,7 +3024,7 @@ const Dashboard: React.FC = () => {
                     }
                   </div>
                 )}
-              
+              </div>
               <div style={{ display: 'flex', gap: '1rem', marginTop: '2rem' }}>
                 <button type="button" onClick={() => setShowAddForwardingModal(false)} className="btn btn-secondary" style={{ flex: 1 }}>
                   Cancelar
