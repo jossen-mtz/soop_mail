@@ -59,7 +59,9 @@ const Dashboard: React.FC = () => {
   const [showAddAliasModal, setShowAddAliasModal] = useState(false);
   const [newAlias, setNewAlias] = useState({ email: '', destinations: '', is_dynamic: false });
   const [recipientSearch, setRecipientSearch] = useState('');
+  const [aliasSearch, setAliasSearch] = useState('');
   const [showRecipientList, setShowRecipientList] = useState(false);
+  const [showAliasList, setShowAliasList] = useState(false);
   const [showViewModal, setShowViewModal] = useState(false);
   const [showEditModal, setShowEditModal] = useState(false);
   const [selectedMailUser, setSelectedMailUser] = useState<MailUser | null>(null);
@@ -2649,7 +2651,18 @@ const Dashboard: React.FC = () => {
             
             <form onSubmit={handleCreateAlias}>
               <div className="input-group" style={{ position: 'relative' }}>
-                <label>Email Virtual</label>
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '0.5rem' }}>
+                  <label style={{ marginBottom: 0 }}>Email Virtual</label>
+                  <button 
+                    type="button" 
+                    onClick={() => setShowAliasList(!showAliasList)}
+                    style={{ background: 'none', border: 'none', color: '#4f46e5', fontSize: '0.75rem', cursor: 'pointer', fontWeight: '600', display: 'flex', alignItems: 'center', gap: '0.25rem' }}
+                  >
+                    <Mail size={14} />
+                    {showAliasList ? 'Ocultar actuales' : 'Ver actuales'}
+                  </button>
+                </div>
+                
                 <input 
                   type="email" 
                   className="input-control" 
@@ -2657,14 +2670,52 @@ const Dashboard: React.FC = () => {
                   value={newAlias.email}
                   onChange={e => setNewAlias({...newAlias, email: e.target.value})}
                   required
-                  list="existing-aliases"
                 />
-                <datalist id="existing-aliases">
-                  {aliases.map(a => (
-                    <option key={a.email} value={a.email} />
-                  ))}
-                </datalist>
-                <p style={{ fontSize: '0.7rem', color: '#94a3b8', marginTop: '0.25rem' }}>
+
+                {showAliasList && (
+                  <div style={{ 
+                    marginTop: '0.5rem', 
+                    background: '#f8fafc', 
+                    borderRadius: '0.75rem', 
+                    border: '1px solid #e2e8f0',
+                    padding: '0.75rem'
+                  }}>
+                    <div style={{ position: 'relative', marginBottom: '0.75rem' }}>
+                      <Search size={14} style={{ position: 'absolute', left: '0.75rem', top: '50%', transform: 'translateY(-50%)', color: '#94a3b8' }} />
+                      <input 
+                        type="text" 
+                        placeholder="Buscar alias existente..."
+                        style={{ width: '100%', padding: '0.4rem 0.75rem 0.4rem 2.25rem', fontSize: '0.75rem', borderRadius: '0.5rem', border: '1px solid #e2e8f0' }}
+                        value={aliasSearch}
+                        onChange={e => setAliasSearch(e.target.value)}
+                      />
+                    </div>
+                    <div style={{ maxHeight: '100px', overflowY: 'auto', display: 'flex', flexWrap: 'wrap', gap: '0.4rem' }}>
+                      {aliases
+                        .filter(a => a.email.toLowerCase().includes(aliasSearch.toLowerCase()))
+                        .map(a => (
+                          <span
+                            key={a.email}
+                            style={{ 
+                              padding: '0.2rem 0.5rem', 
+                              fontSize: '0.7rem', 
+                              background: '#e2e8f0', 
+                              borderRadius: '0.4rem',
+                              color: '#475569'
+                            }}
+                          >
+                            {a.email}
+                          </span>
+                        ))
+                      }
+                      {aliases.filter(a => a.email.toLowerCase().includes(aliasSearch.toLowerCase())).length === 0 && (
+                        <span style={{ fontSize: '0.7rem', color: '#94a3b8' }}>No hay alias que coincidan</span>
+                      )}
+                    </div>
+                  </div>
+                )}
+                
+                <p style={{ fontSize: '0.7rem', color: '#94a3b8', marginTop: '0.5rem' }}>
                   Sugerencia: Evita duplicar alias existentes.
                 </p>
               </div>
@@ -2803,6 +2854,7 @@ const Dashboard: React.FC = () => {
                   value={newForwarding.email}
                   onChange={e => setNewForwarding({...newForwarding, email: e.target.value})}
                   required
+                  list="mail-user-suggestions"
                 />
               </div>
               <div className="input-group">
@@ -2814,7 +2866,13 @@ const Dashboard: React.FC = () => {
                   value={newForwarding.target}
                   onChange={e => setNewForwarding({...newForwarding, target: e.target.value})}
                   required
+                  list="mail-user-suggestions"
                 />
+                <datalist id="mail-user-suggestions">
+                  {mailUsers.map(u => (
+                    <option key={u.email} value={u.email} />
+                  ))}
+                </datalist>
               </div>
               
               <div style={{ display: 'flex', gap: '1rem', marginTop: '2rem' }}>
