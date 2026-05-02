@@ -35,7 +35,6 @@ interface MailUser {
   new_emails: number;
   storage_size: string;
   status: string;
-  department: string;
 }
 
 const Dashboard: React.FC = () => {
@@ -49,15 +48,12 @@ const Dashboard: React.FC = () => {
   const [systemStatus, setSystemStatus] = useState<any>(null);
   const [loading, setLoading] = useState(true);
   const [searchTerm, setSearchTerm] = useState('');
-  const [deptFilter, setDeptFilter] = useState('');
-  const [domainFilter, setDomainFilter] = useState('');
   const [showAddModal, setShowAddModal] = useState(false);
   const [newUser, setNewUser] = useState({ 
     email: '', 
     password: '', 
     password_confirm: '', 
     status: 'active',
-    department: '',
     restart_soop_mail: true 
   });
   const [showAddAliasModal, setShowAddAliasModal] = useState(false);
@@ -69,7 +65,6 @@ const Dashboard: React.FC = () => {
     password: '',
     password_confirm: '',
     status: 'active',
-    department: '',
     restart_soop_mail: true
   });
   
@@ -436,7 +431,6 @@ const Dashboard: React.FC = () => {
     try {
       const payload: any = { 
         status: editMailUserData.status,
-        department: editMailUserData.department,
         restart_soop_mail: true
       };
       if (editMailUserData.password) {
@@ -447,7 +441,7 @@ const Dashboard: React.FC = () => {
       await api.put(`/api/mail/users/${selectedMailUser.email}`, payload);
       showNotification('Usuario actualizado exitosamente', 'success');
       setShowEditModal(false);
-      setEditMailUserData({ password: '', password_confirm: '', status: 'active', department: '', restart_soop_mail: true });
+      setEditMailUserData({ password: '', password_confirm: '', status: 'active', restart_soop_mail: true });
       fetchMailUsers();
     } catch (err: any) {
       showNotification(err.response?.data?.detail || 'Error al actualizar usuario', 'error');
@@ -476,7 +470,7 @@ const Dashboard: React.FC = () => {
       await api.post('/api/mail/users', payload);
       showNotification('Usuario creado exitosamente', 'success');
       setShowAddModal(false);
-      setNewUser({ email: '', password: '', password_confirm: '', status: 'active', department: '', restart_soop_mail: true });
+      setNewUser({ email: '', password: '', password_confirm: '', status: 'active', restart_soop_mail: true });
       fetchMailUsers();
     } catch (err: any) {
       showNotification(err.response?.data?.detail || 'Error al crear usuario', 'error');
@@ -601,11 +595,7 @@ const Dashboard: React.FC = () => {
   };
 
   const filteredUsers = mailUsers.filter(u => {
-    const matchesSearch = u.email.toLowerCase().includes(searchTerm.toLowerCase());
-    const matchesDept = !deptFilter || (u.department && u.department.toLowerCase().includes(deptFilter.toLowerCase()));
-    const domain = u.email.split('@')[1] || '';
-    const matchesDomain = !domainFilter || domain.toLowerCase().includes(domainFilter.toLowerCase());
-    return matchesSearch && matchesDept && matchesDomain;
+    return u.email.toLowerCase().includes(searchTerm.toLowerCase());
   });
 
   const totalMailboxes = mailUsers.length;
@@ -777,28 +767,6 @@ const Dashboard: React.FC = () => {
                       onChange={(e) => setSearchTerm(e.target.value)}
                     />
                   </div>
-                  <div style={{ position: 'relative', width: '200px' }}>
-                    <Database size={16} style={{ position: 'absolute', left: '1rem', top: '50%', transform: 'translateY(-50%)', color: '#94a3b8' }} />
-                    <input 
-                      type="text" 
-                      placeholder="Departamento..." 
-                      className="input-control"
-                      style={{ paddingLeft: '2.75rem', background: '#f8fafc' }}
-                      value={deptFilter}
-                      onChange={(e) => setDeptFilter(e.target.value)}
-                    />
-                  </div>
-                  <div style={{ position: 'relative', width: '200px' }}>
-                    <Share2 size={16} style={{ position: 'absolute', left: '1rem', top: '50%', transform: 'translateY(-50%)', color: '#94a3b8' }} />
-                    <input 
-                      type="text" 
-                      placeholder="Dominio..." 
-                      className="input-control"
-                      style={{ paddingLeft: '2.75rem', background: '#f8fafc' }}
-                      value={domainFilter}
-                      onChange={(e) => setDomainFilter(e.target.value)}
-                    />
-                  </div>
                 </div>
                 <button onClick={fetchMailUsers} className="btn btn-secondary" style={{ padding: '0.625rem' }}>
                   <RefreshCcw size={16} className={loading ? 'animate-spin' : ''} />
@@ -810,7 +778,6 @@ const Dashboard: React.FC = () => {
                   <thead>
                     <tr>
                       <th>USUARIO / EMAIL</th>
-                      <th>DEPARTAMENTO</th>
                       <th>ESTADO</th>
                       <th>CORREOS</th>
                       <th style={{ textAlign: 'right' }}>ACCIONES</th>
@@ -826,7 +793,6 @@ const Dashboard: React.FC = () => {
                     ) : filteredUsers.map((u) => (
                       <tr key={u.email}>
                         <td style={{ fontWeight: '600', color: '#1e293b' }}>{u.email}</td>
-                        <td style={{ fontSize: '0.875rem', color: '#64748b' }}>{u.department || '-'}</td>
                         <td>
                           <span style={{ 
                             padding: '0.25rem 0.625rem', 
@@ -893,7 +859,6 @@ const Dashboard: React.FC = () => {
                                   password: '', 
                                   password_confirm: '', 
                                   status: u.status || 'active', 
-                                  department: u.department || '',
                                   restart_soop_mail: true 
                                 }); 
                                 setShowEditModal(true); 
@@ -2044,17 +2009,7 @@ const Dashboard: React.FC = () => {
                 </div>
               </div>
 
-              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '1rem', marginBottom: '1.5rem' }}>
-                <div className="input-group" style={{ marginBottom: 0 }}>
-                  <label>Departamento</label>
-                  <input 
-                    type="text" 
-                    className="input-control" 
-                    placeholder="Sistemas, Contabilidad..."
-                    value={newUser.department}
-                    onChange={e => setNewUser({...newUser, department: e.target.value})}
-                  />
-                </div>
+              <div style={{ display: 'grid', gridTemplateColumns: '1fr', gap: '1rem', marginBottom: '1.5rem' }}>
                 <div className="input-group" style={{ marginBottom: 0 }}>
                   <label>Estado de Cuenta</label>
                   <select 
@@ -2482,17 +2437,7 @@ const Dashboard: React.FC = () => {
                 </div>
               </div>
 
-              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '1rem', marginBottom: '1.5rem' }}>
-                <div className="input-group" style={{ marginBottom: 0 }}>
-                  <label>Departamento</label>
-                  <input 
-                    type="text" 
-                    className="input-control" 
-                    placeholder="Sistemas, Contabilidad..."
-                    value={editMailUserData.department}
-                    onChange={e => setEditMailUserData({...editMailUserData, department: e.target.value})}
-                  />
-                </div>
+              <div style={{ display: 'grid', gridTemplateColumns: '1fr', gap: '1rem', marginBottom: '1.5rem' }}>
                 <div className="input-group" style={{ marginBottom: 0 }}>
                   <label>Estado de Cuenta</label>
                   <select 

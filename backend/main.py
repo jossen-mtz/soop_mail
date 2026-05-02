@@ -69,13 +69,15 @@ app.add_middleware(
 )
 
 # Configuration from environment
-USERS_FILE = os.environ.get('USERS_FILE', '/etc/soop-mail/users')
+USERS_FILE = os.environ.get('SOOP_MAIL_USERS_FILE', os.environ.get('USERS_FILE', '/etc/soop-mail/users'))
+print(f"DEBUG: USERS_FILE path: {USERS_FILE} (exists: {os.path.exists(USERS_FILE)})")
 POSTFIX_VIRTUAL = os.environ.get('POSTFIX_VIRTUAL', '/etc/postfix/virtual')
 POSTFIX_VMAILBOX = os.environ.get('POSTFIX_VMAILBOX', '/etc/postfix/vmailbox')
 ALIAS_META_FILE = os.environ.get('ALIAS_META_FILE', '/etc/soop-mail/aliases_meta.json')
 SENDER_BCC_FILE = os.environ.get('SENDER_BCC_FILE', '/etc/postfix/sender_bcc')
 POSTFIX_SENDER_RESTRICTIONS = os.environ.get('POSTFIX_SENDER_RESTRICTIONS', '/etc/postfix/sender_restrictions')
-MAIL_BASE = os.environ.get('MAIL_BASE', '/var/mail/vhosts')
+MAIL_BASE = os.environ.get('SOOP_MAIL_BASE', os.environ.get('MAIL_BASE', '/var/mail/vhosts'))
+print(f"DEBUG: MAIL_BASE path: {MAIL_BASE} (exists: {os.path.exists(MAIL_BASE)})")
 VMAIL_UID = int(os.getenv("SOOP_MAIL_VMAIL_UID", 5000))
 VMAIL_GID = int(os.getenv("SOOP_MAIL_VMAIL_GID", 5000))
 DEFAULT_DOMAIN = os.getenv("DEFAULT_DOMAIN", "mmbtransporte.com")
@@ -98,6 +100,15 @@ def log_audit(db: Session, user_id: Optional[int], action: str, resource_type: s
     )
     db.add(db_item)
     db.commit()
+
+def validate_password_format(password: str):
+    return len(password) >= 8
+
+def get_password_hash(password: str):
+    return sha512_crypt.hash(password, rounds=5000)
+
+def verify_password(plain_password: str, hashed_password: str):
+    return sha512_crypt.verify(plain_password, hashed_password)
 
 def validate_email_format(email: str):
     pattern = r'^[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}$'
@@ -240,9 +251,6 @@ def read_users_file():
                     
                     # Check for extra fields in the shell part or after
                     extra = parts[7] if len(parts) > 7 else ""
-                    dept = ""
-                    if "dept=" in extra:
-                        dept = extra.split("dept=")[1].split(",")[0]
                     if "status=" in extra:
                         status = extra.split("status=")[1].split(",")[0]
 
@@ -255,7 +263,7 @@ def read_users_file():
                         'home': parts[5] if len(parts) > 5 else '',
                         'shell': parts[6] if len(parts) > 6 else '',
                         'status': status,
-                        'department': dept
+                        'department': '' # Removed as requested
                     })
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Error reading users file: {str(e)}")
