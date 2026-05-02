@@ -1411,7 +1411,7 @@ const Dashboard: React.FC = () => {
               <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '1rem' }}>
                 <div className="input-group">
                   <label>Peso del Buzón</label>
-                  <div style={{ fontWeight: '800', color: '#1e293b', padding: '0.75rem 1rem', background: '#fffbeb', borderRadius: '0.75rem', border: '1px solid #fef3c7', color: '#92400e' }}>
+                  <div style={{ fontWeight: '800', padding: '0.75rem 1rem', background: '#fffbeb', borderRadius: '0.75rem', border: '1px solid #fef3c7', color: '#92400e' }}>
                     {selectedMailUser.storage_size}
                   </div>
                 </div>
