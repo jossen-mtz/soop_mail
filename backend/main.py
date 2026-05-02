@@ -40,8 +40,9 @@ app.add_middleware(
 )
 
 # Configuration from environment
-USERS_FILE = os.getenv("SOOP_MAIL_USERS_FILE", "/etc/soop_mail/users")
-MAIL_BASE = os.getenv("SOOP_MAIL_BASE", "/var/mail/soop_mail")
+USERS_FILE = os.getenv("SOOP_MAIL_USERS_FILE", "/etc/dovecot/users")
+MAIL_BASE = os.getenv("SOOP_MAIL_BASE", "/var/mail/vhosts")
+POSTFIX_VMAILBOX = os.getenv("POSTFIX_VMAILBOX", "/etc/postfix/vmailbox")
 VMAIL_UID = int(os.getenv("SOOP_MAIL_VMAIL_UID", 5000))
 VMAIL_GID = int(os.getenv("SOOP_MAIL_VMAIL_GID", 5000))
 
@@ -72,14 +73,21 @@ def count_emails(mail_dir: str):
     if not mail_dir or not os.path.exists(mail_dir):
         return 0
     count = 0
-    # Standard Maildir structure: cur, new, tmp
-    for subdir in ['cur', 'new']:
-        path = os.path.join(mail_dir, subdir)
-        if os.path.exists(path) and os.path.isdir(path):
-            try:
-                count += len([f for f in os.listdir(path) if os.path.isfile(os.path.join(path, f))])
-            except Exception:
-                pass
+    
+    # Try direct subdirs and nested Maildir subdir
+    possible_paths = [mail_dir]
+    if os.path.exists(os.path.join(mail_dir, 'Maildir')):
+        possible_paths.append(os.path.join(mail_dir, 'Maildir'))
+        
+    for base in possible_paths:
+        # Standard Maildir structure: cur, new, tmp
+        for subdir in ['cur', 'new']:
+            path = os.path.join(base, subdir)
+            if os.path.exists(path) and os.path.isdir(path):
+                try:
+                    count += len([f for f in os.listdir(path) if os.path.isfile(os.path.join(path, f))])
+                except Exception:
+                    pass
     return count
 
 def get_dir_size(path):
@@ -145,6 +153,35 @@ def read_users_file():
         raise HTTPException(status_code=500, detail=f"Error reading users file: {str(e)}")
     return users
 
+def update_postfix_vmailbox(users: List[dict]):
+    try:
+        postfix_dir = os.path.dirname(POSTFIX_VMAILBOX) or '.'
+        with NamedTemporaryFile('w', dir=postfix_dir, delete=False) as tmp:
+            temp_path = tmp.name
+            for user in users:
+                # Format: user@domain.com  domain.com/user/
+                email = user['email']
+                domain = email.split('@')[1]
+                username = email.split('@')[0]
+                # Note: Postfix usually expects the relative path from virtual_mailbox_base
+                line = f"{email} {domain}/{username}/\n"
+                tmp.write(line)
+        
+        if os.name != 'nt':
+            os.chmod(temp_path, 0o644)
+        shutil.move(temp_path, POSTFIX_VMAILBOX)
+        
+        # Run postmap
+        try:
+            subprocess.run(['postmap', POSTFIX_VMAILBOX], check=True)
+        except Exception as e:
+            print(f"Warning: Could not run postmap: {str(e)}")
+            
+        return True
+    except Exception as e:
+        print(f"Error updating Postfix vmailbox: {str(e)}")
+        return False
+
 def write_users_file(users: List[dict]):
     try:
         users_dir = os.path.dirname(USERS_FILE) or '.'
@@ -157,6 +194,10 @@ def write_users_file(users: List[dict]):
         if os.name != 'nt':
             os.chmod(temp_path, 0o644)
         shutil.move(temp_path, USERS_FILE)
+        
+        # Also update Postfix vmailbox to keep them in sync
+        update_postfix_vmailbox(users)
+        
         return True
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Error writing users file: {str(e)}")
