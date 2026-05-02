@@ -1483,6 +1483,79 @@ const Dashboard: React.FC = () => {
                           </div>
                         </div>
                       </div>
+
+                      <div className="card" style={{ padding: '1.5rem', gridColumn: 'span 2' }}>
+                        <h4 style={{ fontSize: '1rem', fontWeight: '700', color: '#1e293b', marginBottom: '1.25rem', display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+                          <Database size={18} style={{ color: '#4f46e5' }} />
+                          Estado de Archivos y Permisos
+                        </h4>
+                        <div style={{ overflowX: 'auto' }}>
+                          <table style={{ width: '100%', fontSize: '0.813rem', borderCollapse: 'collapse' }}>
+                            <thead>
+                              <tr style={{ textAlign: 'left', borderBottom: '1px solid #f1f5f9' }}>
+                                <th style={{ padding: '0.5rem', color: '#64748b' }}>ARCHIVO</th>
+                                <th style={{ padding: '0.5rem', color: '#64748b' }}>RUTA</th>
+                                <th style={{ padding: '0.5rem', color: '#64748b' }}>ESTADO</th>
+                                <th style={{ padding: '0.5rem', color: '#64748b' }}>PERMISOS</th>
+                              </tr>
+                            </thead>
+                            <tbody>
+                              {systemStatus?.details?.file_diagnostics && Object.entries(systemStatus.details.file_diagnostics).map(([name, data]: [string, any]) => (
+                                <tr key={name} style={{ borderBottom: '1px solid #f8fafc' }}>
+                                  <td style={{ padding: '0.75rem 0.5rem', fontWeight: '600', color: '#334155' }}>
+                                    {name.replace('_', ' ').toUpperCase()}
+                                  </td>
+                                  <td style={{ padding: '0.75rem 0.5rem' }}>
+                                    <code style={{ fontSize: '0.7rem', color: '#64748b', background: '#f8fafc', padding: '2px 4px', borderRadius: '4px' }}>
+                                      {data.path}
+                                    </code>
+                                  </td>
+                                  <td style={{ padding: '0.75rem 0.5rem' }}>
+                                    <span style={{ 
+                                      display: 'inline-flex', 
+                                      alignItems: 'center', 
+                                      gap: '0.25rem',
+                                      color: data.exists ? '#16a34a' : '#ef4444',
+                                      fontWeight: '600'
+                                    }}>
+                                      {data.exists ? <CheckCircle size={12} /> : <AlertCircle size={12} />}
+                                      {data.status}
+                                    </span>
+                                  </td>
+                                  <td style={{ padding: '0.75rem 0.5rem' }}>
+                                    <span style={{ 
+                                      padding: '0.125rem 0.5rem',
+                                      borderRadius: '9999px',
+                                      fontSize: '0.7rem',
+                                      fontWeight: '600',
+                                      background: data.writable ? '#dcfce7' : '#fee2e2',
+                                      color: data.writable ? '#166534' : '#991b1b'
+                                    }}>
+                                      {data.write_status}
+                                    </span>
+                                  </td>
+                                </tr>
+                              ))}
+                            </tbody>
+                          </table>
+                          {!systemStatus?.details?.file_diagnostics && (
+                            <p style={{ textAlign: 'center', padding: '1rem', color: '#94a3b8' }}>
+                              Cargando diagnósticos de archivos...
+                            </p>
+                          )}
+                        </div>
+                        {systemStatus?.details?.file_diagnostics?.aliases_meta?.write_status === 'READ_ONLY' && (
+                          <div style={{ marginTop: '1rem', padding: '0.75rem', background: '#fffbeb', border: '1px solid #fef3c7', borderRadius: '0.5rem', display: 'flex', gap: '0.5rem', alignItems: 'flex-start' }}>
+                            <AlertCircle size={16} style={{ color: '#d97706', marginTop: '0.125rem' }} />
+                            <div>
+                              <p style={{ fontSize: '0.75rem', fontWeight: '600', color: '#92400e', marginBottom: '0.25rem' }}>Problema de Permisos Detectado</p>
+                              <p style={{ fontSize: '0.7rem', color: '#b45309' }}>
+                                El directorio de configuración no es escribible. Ejecuta: <code style={{ background: '#fef3c7', padding: '1px 3px' }}>sudo chown -R $USER /etc/soop-mail</code> en el servidor.
+                              </p>
+                            </div>
+                          </div>
+                        )}
+                      </div>
                     </div>
                   </motion.div>
                 )}

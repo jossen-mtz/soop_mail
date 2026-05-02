@@ -1140,6 +1140,29 @@ async def get_system_status(current_user: models.User = Depends(auth.get_current
         "database_logs": database.CONNECTION_LOGS
     }
     
+    # Mail System Diagnostics
+    file_diagnostics = {}
+    files_to_check = {
+        "users": USERS_FILE,
+        "virtual": POSTFIX_VIRTUAL,
+        "aliases_meta": ALIAS_META_FILE,
+        "sender_bcc": SENDER_BCC_FILE,
+        "mail_base": MAIL_BASE
+    }
+    for name, path in files_to_check.items():
+        exists = os.path.exists(path)
+        # Check if parent directory is writable
+        parent_dir = os.path.dirname(path) if os.path.exists(os.path.dirname(path)) else path
+        writable = os.access(parent_dir, os.W_OK)
+        file_diagnostics[name] = {
+            "path": path,
+            "exists": exists,
+            "writable": writable,
+            "status": "OK" if exists else "NOT_FOUND",
+            "write_status": "WRITABLE" if writable else "READ_ONLY"
+        }
+    details["file_diagnostics"] = file_diagnostics
+    
     if os.name != 'nt':
         try:
             with open('/proc/uptime', 'r') as f:
