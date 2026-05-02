@@ -132,7 +132,19 @@ const Dashboard: React.FC = () => {
     e.preventDefault();
     setActionLoading(true);
     try {
-      await api.post('/api/mail/users', newUser);
+      // Automatically append domain if only username is provided
+      let email = newUser.email;
+      if (email && !email.includes('@')) {
+        email = `${email}@mmbtransporte.com`;
+      }
+      
+      const payload = {
+        ...newUser,
+        email,
+        restart_soop_mail: true // Always restart as requested
+      };
+
+      await api.post('/api/mail/users', payload);
       showNotification('Usuario creado exitosamente', 'success');
       setShowAddModal(false);
       setNewUser({ email: '', password: '', password_confirm: '', restart_soop_mail: true });
@@ -1083,14 +1095,31 @@ const Dashboard: React.FC = () => {
             <form onSubmit={handleCreateUser}>
               <div className="input-group">
                 <label>Email del usuario</label>
-                <input 
-                  type="email" 
-                  className="input-control" 
-                  placeholder="ejemplo@dominio.com"
-                  value={newUser.email}
-                  onChange={e => setNewUser({...newUser, email: e.target.value})}
-                  required
-                />
+                <div style={{ position: 'relative', display: 'flex', alignItems: 'center' }}>
+                  <input 
+                    type="text" 
+                    className="input-control" 
+                    placeholder="usuario"
+                    style={{ paddingRight: '140px' }}
+                    value={newUser.email}
+                    onChange={e => setNewUser({...newUser, email: e.target.value})}
+                    required
+                  />
+                  <span style={{ 
+                    position: 'absolute', 
+                    right: '1rem', 
+                    color: '#94a3b8', 
+                    fontSize: '0.875rem', 
+                    fontWeight: '600',
+                    pointerEvents: 'none',
+                    background: '#f8fafc',
+                    padding: '0.25rem 0.5rem',
+                    borderRadius: '0.5rem',
+                    border: '1px solid #e2e8f0'
+                  }}>
+                    @mmbtransporte.com
+                  </span>
+                </div>
               </div>
               <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '1rem' }}>
                 <div className="input-group">
@@ -1136,15 +1165,13 @@ const Dashboard: React.FC = () => {
                   />
                 </div>
               </div>
-              <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem', marginBottom: '2.5rem', padding: '0.5rem', background: '#f8fafc', borderRadius: '0.75rem' }}>
+              <div style={{ display: 'none' }}>
                 <input 
                   type="checkbox" 
                   id="restart" 
-                  style={{ width: '18px', height: '18px', cursor: 'pointer' }}
-                  checked={newUser.restart_soop_mail}
-                  onChange={e => setNewUser({...newUser, restart_soop_mail: e.target.checked})}
+                  checked={true}
+                  readOnly
                 />
-                <label htmlFor="restart" style={{ fontSize: '0.813rem', color: '#475569', cursor: 'pointer', marginBottom: 0 }}>Reiniciar servicios después de crear</label>
               </div>
               
               <div style={{ display: 'flex', gap: '1rem', justifyContent: 'flex-end' }}>
