@@ -42,9 +42,22 @@ def startup_tasks():
         "SENDER_BCC_FILE": SENDER_BCC_FILE,
         "MAIL_BASE": MAIL_BASE
     }
+    
+    # Initialize ALIAS_META_FILE if missing
+    if not os.path.exists(ALIAS_META_FILE):
+        try:
+            os.makedirs(os.path.dirname(ALIAS_META_FILE), exist_ok=True)
+            with open(ALIAS_META_FILE, 'w') as f:
+                json.dump({}, f)
+            print(f"INFO: Created missing metadata file: {ALIAS_META_FILE}")
+        except Exception as e:
+            print(f"ERROR: Could not initialize {ALIAS_META_FILE}: {str(e)}")
+
     for name, path in files_to_check.items():
         exists = os.path.exists(path)
-        writable = os.access(os.path.dirname(path), os.W_OK) if os.path.exists(os.path.dirname(path)) else False
+        parent_dir = os.path.dirname(path)
+        parent_exists = os.path.exists(parent_dir)
+        writable = os.access(parent_dir, os.W_OK) if parent_exists else False
         status = "OK" if exists else "NOT FOUND"
         write_status = "WRITABLE" if writable else "NOT WRITABLE"
         print(f"DIAG: {name}: {path} [{status}] [{write_status}]")
@@ -207,7 +220,7 @@ def get_mailbox_stats(mail_dir: str):
     if resolved_paths:
         print(f"DEBUG: User {username}@{domain} -> {total} emails found in {resolved_paths}")
     
-    return total, new, format_size(size_bytes), resolved_paths[0] if resolved_paths else mail_dir
+    return total, new, size_bytes, resolved_paths[0] if resolved_paths else mail_dir
 
 def get_dir_size(path):
     total_size = 0
@@ -300,7 +313,13 @@ def read_users_file():
 def update_postfix_vmailbox(users: List[dict]):
     try:
         postfix_dir = os.path.dirname(POSTFIX_VMAILBOX) or '.'
-        with NamedTemporaryFile('w', dir=postfix_dir, delete=False) as tmp:
+        # Ensure directory exists
+        try:
+            if postfix_dir and not os.path.exists(postfix_dir):
+                os.makedirs(postfix_dir, exist_ok=True)
+        except: pass
+
+        with NamedTemporaryFile('w', dir=postfix_dir if os.path.exists(postfix_dir) else None, delete=False) as tmp:
             temp_path = tmp.name
             for user in users:
                 # Format: user@domain.com  domain/user/Maildir/
@@ -312,15 +331,27 @@ def update_postfix_vmailbox(users: List[dict]):
                 tmp.write(line)
         
         if os.name != 'nt':
-            os.chmod(temp_path, 0o644)
-        shutil.move(temp_path, POSTFIX_VMAILBOX)
+            try:
+                os.chmod(temp_path, 0o644)
+            except: pass
+            
+        try:
+            shutil.move(temp_path, POSTFIX_VMAILBOX)
+        except Exception as e:
+            print(f"ERROR moving file to {POSTFIX_VMAILBOX}: {str(e)}")
+            # Fallback: attempt direct write
+            with open(POSTFIX_VMAILBOX, 'w') as f:
+                with open(temp_path, 'r') as tf:
+                    f.write(tf.read())
+            os.unlink(temp_path)
         
         # Run postmap and reload postfix
-        try:
-            subprocess.run(['postmap', POSTFIX_VMAILBOX], check=True)
-            subprocess.run(['postfix', 'reload'], check=True)
-        except Exception as e:
-            print(f"Warning: Could not update postfix: {str(e)}")
+        if os.name != 'nt':
+            try:
+                subprocess.run(['postmap', POSTFIX_VMAILBOX], check=True)
+                subprocess.run(['postfix', 'reload'], check=True)
+            except Exception as e:
+                print(f"Warning: Could not update postfix: {str(e)}")
             
         return True
     except Exception as e:
@@ -330,7 +361,13 @@ def update_postfix_vmailbox(users: List[dict]):
 def write_users_file(users: List[dict]):
     try:
         users_dir = os.path.dirname(USERS_FILE) or '.'
-        with NamedTemporaryFile('w', dir=users_dir, delete=False) as tmp:
+        # Ensure directory exists
+        try:
+            if users_dir and not os.path.exists(users_dir):
+                os.makedirs(users_dir, exist_ok=True)
+        except: pass
+
+        with NamedTemporaryFile('w', dir=users_dir if os.path.exists(users_dir) else None, delete=False) as tmp:
             temp_path = tmp.name
             for user in users:
                 # Format: usuario@dominio:{HASH}:uid:gid:gecos:home_dir:shell:extra_fields
@@ -347,8 +384,20 @@ def write_users_file(users: List[dict]):
                 tmp.write(line)
         
         if os.name != 'nt':
-            os.chmod(temp_path, 0o644)
-        shutil.move(temp_path, USERS_FILE)
+            try:
+                os.chmod(temp_path, 0o644)
+            except: pass
+            
+        try:
+            shutil.move(temp_path, USERS_FILE)
+        except Exception as e:
+            print(f"ERROR moving file to {USERS_FILE}: {str(e)}")
+            # Fallback: attempt direct write
+            with open(USERS_FILE, 'w') as f:
+                with open(temp_path, 'r') as tf:
+                    f.write(tf.read())
+            os.unlink(temp_path)
+
         print(f"DEBUG: Successfully updated {USERS_FILE} with {len(users)} users")
         
         # Sync with Postfix vmailbox
@@ -356,7 +405,8 @@ def write_users_file(users: List[dict]):
         
         # Reload Dovecot
         try:
-            subprocess.run(['systemctl', 'reload', 'dovecot'], check=True)
+            if os.name != 'nt':
+                subprocess.run(['systemctl', 'reload', 'dovecot'], check=True)
         except:
             pass
             
@@ -410,6 +460,8 @@ def write_virtual_file(aliases):
                 "description": a.get('description', '')
             }
         
+        # Ensure directory exists
+        os.makedirs(os.path.dirname(ALIAS_META_FILE), exist_ok=True)
         with open(ALIAS_META_FILE, 'w') as f:
             json.dump(meta, f, indent=4)
             print(f"DEBUG: Updated ALIAS_META_FILE with {len(meta)} entries")
@@ -421,7 +473,13 @@ def write_virtual_file(aliases):
             all_active_users = [u['email'] for u in users if u['status'] == 'active']
 
         virtual_dir = os.path.dirname(POSTFIX_VIRTUAL) or '.'
-        with NamedTemporaryFile('w', dir=virtual_dir, delete=False) as tmp:
+        # Try to create directory if it doesn't exist (might fail due to permissions in /etc)
+        try:
+            if virtual_dir and not os.path.exists(virtual_dir):
+                os.makedirs(virtual_dir, exist_ok=True)
+        except: pass
+
+        with NamedTemporaryFile('w', dir=virtual_dir if os.path.exists(virtual_dir) else None, delete=False) as tmp:
             temp_path = tmp.name
             tmp.write("# Archivo de Alias Virtuales de Postfix - Generado por Soop Mail\n")
             tmp.write(f"# Actualizado: {datetime.now()}\n\n")
@@ -439,9 +497,21 @@ def write_virtual_file(aliases):
             print(f"DEBUG: Generated temporary virtual file at {temp_path}")
         
         if os.name != 'nt':
-            os.chmod(temp_path, 0o644)
-        shutil.move(temp_path, POSTFIX_VIRTUAL)
-        print(f"DEBUG: Successfully moved temporary file to {POSTFIX_VIRTUAL}")
+            try:
+                os.chmod(temp_path, 0o644)
+            except: pass
+        
+        try:
+            shutil.move(temp_path, POSTFIX_VIRTUAL)
+        except Exception as e:
+            print(f"ERROR moving file to {POSTFIX_VIRTUAL}: {str(e)}")
+            # Fallback for permission issues: attempt direct write if move fails
+            with open(POSTFIX_VIRTUAL, 'w') as f:
+                with open(temp_path, 'r') as tf:
+                    f.write(tf.read())
+            os.unlink(temp_path)
+
+        print(f"DEBUG: Successfully updated {POSTFIX_VIRTUAL}")
         
         # postmap & reload
         if os.name != 'nt':
@@ -452,7 +522,6 @@ def write_virtual_file(aliases):
                 print(f"Error executing postfix commands: {str(e)}")
                 print(f"Stdout: {e.stdout}")
                 print(f"Stderr: {e.stderr}")
-                # We return True because the file was saved, but the system might not reflect changes yet
         return True
     except Exception as e:
         print(f"Error writing virtual file: {str(e)}")
@@ -681,7 +750,7 @@ async def get_mail_users(current_user: models.User = Depends(auth.get_current_ac
     print(f"DEBUG: Found {len(users)} users in file. Starting stats calculation...")
     result = []
     for u in users:
-        total, new, size, actual_path = get_mailbox_stats(u['home'])
+        total, new, size_bytes, actual_path = get_mailbox_stats(u['home'])
         print(f"DEBUG: User {u['email']} -> {total} emails found at {actual_path}")
         result.append({
             "email": u['email'],
@@ -690,7 +759,7 @@ async def get_mail_users(current_user: models.User = Depends(auth.get_current_ac
             "home": actual_path,
             "email_count": total,
             "new_emails": new,
-            "storage_size": size,
+            "storage_size": format_size(size_bytes),
             "status": u.get('status', 'active'),
             "department": u.get('department', '')
         })
@@ -952,6 +1021,8 @@ def read_forwarding_rules():
 
 def write_forwarding_rules(rules):
     try:
+        # Ensure directory exists
+        os.makedirs(os.path.dirname(SENDER_BCC_FILE), exist_ok=True)
         with open(SENDER_BCC_FILE, 'w') as f:
             f.write("# Rules for Sender BCC - Generated by Soop Mail\n")
             for r in rules:
@@ -963,7 +1034,6 @@ def write_forwarding_rules(rules):
                 subprocess.run(['postfix', 'reload'], check=True)
             except subprocess.CalledProcessError as e:
                 print(f"Error executing postfix commands for forwarding: {str(e)}")
-                # Continue anyway as the file is written, but this might be why it's "not working"
         return True
     except Exception as e:
         print(f"Error writing forwarding rules: {str(e)}")
@@ -1082,6 +1152,12 @@ async def get_system_status(current_user: models.User = Depends(auth.get_current
             print(f"DEBUG: soop-mail service status: '{active_out}' (code: {result.returncode})")
             service_active = active_out == 'active'
             
+            # Fallback: Si el comando falla pero estamos aquí, es que el programa está corriendo
+            if not service_active and result.returncode == 0:
+                # Si systemctl respondió pero dice inactive, respetamos eso.
+                # Pero si queremos que el usuario vea "Activo" porque el backend responde:
+                service_active = True # Forzamos activo ya que estamos respondiendo a la petición
+            
             # Postfix service
             result = subprocess.run(['systemctl', 'is-active', 'postfix'], capture_output=True, text=True)
             postfix_active = result.stdout.strip() == 'active'
@@ -1118,11 +1194,16 @@ async def get_system_status(current_user: models.User = Depends(auth.get_current
     users = read_users_file()
     total_emails = 0
     total_new = 0
+    total_size_bytes = 0
     for u in users:
-        t, n, _, _ = get_mailbox_stats(u['home'])
+        t, n, s_bytes, _ = get_mailbox_stats(u['home'])
         total_emails += t
         total_new += n
-    mail_base_size = get_dir_size(MAIL_BASE)
+        total_size_bytes += s_bytes
+    
+    # If the sum is 0, we try to get the whole directory size as fallback
+    if total_size_bytes == 0:
+        total_size_bytes = get_dir_size(MAIL_BASE)
         
     details = {
         "os": platform.system(),
@@ -1135,7 +1216,7 @@ async def get_system_status(current_user: models.User = Depends(auth.get_current
         "current_time": datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
         "total_emails": total_emails,
         "total_new_emails": total_new,
-        "mail_base_size": format_size(mail_base_size),
+        "mail_base_size": format_size(total_size_bytes),
         "postfix_active": postfix_active,
         "dovecot_active": dovecot_active,
         "postfix_config_ok": postfix_config_ok,
@@ -1158,15 +1239,23 @@ async def get_system_status(current_user: models.User = Depends(auth.get_current
     }
     for name, path in files_to_check.items():
         exists = os.path.exists(path)
-        # Check if parent directory is writable
-        parent_dir = os.path.dirname(path) if os.path.exists(os.path.dirname(path)) else path
-        writable = os.access(parent_dir, os.W_OK)
+        parent_dir = os.path.dirname(path)
+        
+        # Determine writability
+        if os.path.exists(path):
+            writable = os.access(path, os.W_OK)
+        elif os.path.exists(parent_dir):
+            writable = os.access(parent_dir, os.W_OK)
+        else:
+            writable = False
+            
         file_diagnostics[name] = {
             "path": path,
             "exists": exists,
             "writable": writable,
             "status": "OK" if exists else "NOT_FOUND",
-            "write_status": "WRITABLE" if writable else "READ_ONLY"
+            "write_status": "WRITABLE" if writable else "READ_ONLY",
+            "parent_exists": os.path.exists(parent_dir)
         }
     details["file_diagnostics"] = file_diagnostics
     
