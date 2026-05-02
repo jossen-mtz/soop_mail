@@ -23,12 +23,40 @@ models.Base.metadata.create_all(bind=engine)
 app = FastAPI(title="soop MAIL API")
 
 @app.on_event("startup")
-def startup_db_check():
+def startup_tasks():
     success, message = check_db_connection()
     if not success:
         print(f"CRITICAL: Database connection failed: {message}")
-    else:
-        print(f"SUCCESS: {message}")
+        return
+    
+    print(f"SUCCESS: {message}")
+    
+    # Create default admin if database is empty
+    db = next(get_db())
+    try:
+        admin_user = db.query(models.User).filter(models.User.is_admin == True).first()
+        if not admin_user:
+            admin_username = os.getenv("ADMIN_USERNAME", "admin")
+            admin_password = os.getenv("ADMIN_PASSWORD", "admin")
+            admin_email = os.getenv("ADMIN_EMAIL", "admin@soopmail.com")
+            
+            print(f"INFO: No admin users found. Creating default admin: {admin_username}")
+            
+            new_admin = models.User(
+                username=admin_username,
+                email=admin_email,
+                full_name="Administrator",
+                is_admin=True,
+                is_active=True,
+                password_hash=auth.get_password_hash(admin_password)
+            )
+            db.add(new_admin)
+            db.commit()
+            print("INFO: Default admin created successfully.")
+    except Exception as e:
+        print(f"ERROR: Could not create default admin: {str(e)}")
+    finally:
+        db.close()
 
 # CORS configuration
 app.add_middleware(
