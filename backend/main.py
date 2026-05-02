@@ -102,74 +102,74 @@ def get_mailbox_stats(mail_dir: str):
     if not mail_dir:
         return 0, 0, "0 B", ""
         
-    # Try multiple possible locations for this mailbox
-    possible_paths = [
-        mail_dir,
-        os.path.join(MAIL_BASE, os.path.basename(os.path.dirname(mail_dir)), os.path.basename(mail_dir)) if '/' in mail_dir else "",
-        os.path.join('/var/mail/soop_mail', os.path.basename(os.path.dirname(mail_dir)), os.path.basename(mail_dir)) if '/' in mail_dir else "",
-        os.path.join('/var/mail/vhosts', os.path.basename(os.path.dirname(mail_dir)), os.path.basename(mail_dir)) if '/' in mail_dir else ""
-    ]
+    # Extraer dominio y usuario de la ruta original para buscar en bases alternativas
+    parts = mail_dir.strip('/').split('/')
+    domain = parts[-2] if len(parts) >= 2 else DEFAULT_DOMAIN
+    username = parts[-1] if len(parts) >= 1 else ""
     
-    actual_path = ""
-    for p in possible_paths:
-        if p and os.path.exists(p):
-            actual_path = p
-            break
-            
-    if not actual_path:
-        # One last try: if it's just a username or ends with username
-        username = os.path.basename(mail_dir)
-        # Try to find it in MAIL_BASE/DEFAULT_DOMAIN/username
-        p = os.path.join(MAIL_BASE, DEFAULT_DOMAIN, username)
-        if os.path.exists(p):
-            actual_path = p
-
-    print(f"DEBUG: Counting emails for {mail_dir} -> Resolved to: {actual_path}")
-    if not actual_path:
-        return 0, 0, "0 B", mail_dir
-        
-    try:
-        content = os.listdir(actual_path)
-        print(f"DEBUG: Directory {actual_path} contains: {content}")
-    except Exception as e:
-        print(f"DEBUG: Could not list {actual_path}: {str(e)}")
-
+    # Bases donde buscaremos para sumar todo
+    MAILBOX_BASES = ["/var/mail/vhosts", "/var/mail/soop_mail"]
+    
     total = 0
     new = 0
     size_bytes = 0
+    resolved_paths = []
+
+    for base in MAILBOX_BASES:
+        mailbox_path = os.path.join(base, domain, username)
+        if not os.path.exists(mailbox_path):
+            continue
+            
+        resolved_paths.append(mailbox_path)
+        try:
+            for root, dirs, files in os.walk(mailbox_path):
+                folder_name = os.path.basename(root)
+                # Solo contar en carpetas cur y new (estándar Maildir)
+                if folder_name in ("cur", "new"):
+                    is_new_dir = folder_name == "new"
+                    for file in files:
+                        # Ignorar archivos de índice/control de dovecot
+                        if file.startswith("dovecot"):
+                            continue
+                            
+                        total += 1
+                        if is_new_dir:
+                            new += 1
+                            
+                        try:
+                            fp = os.path.join(root, file)
+                            if not os.path.islink(fp):
+                                size_bytes += os.path.getsize(fp)
+                        except:
+                            pass
+        except Exception as e:
+            print(f"DEBUG: Error al leer {mailbox_path}: {str(e)}")
+            
+    # Si no se encontró en ninguna base estándar, usamos la ruta original del archivo
+    if not resolved_paths and os.path.exists(mail_dir):
+        resolved_paths.append(mail_dir)
+        try:
+            for root, dirs, files in os.walk(mail_dir):
+                folder_name = os.path.basename(root)
+                if folder_name in ("cur", "new"):
+                    is_new_dir = folder_name == "new"
+                    for file in files:
+                        if file.startswith("dovecot"):
+                            continue
+                        total += 1
+                        if is_new_dir: new += 1
+                        try:
+                            fp = os.path.join(root, file)
+                            if not os.path.islink(fp):
+                                size_bytes += os.path.getsize(fp)
+                        except: pass
+        except: pass
+
+    # Mostrar de dónde vienen los datos en el log
+    if resolved_paths:
+        print(f"DEBUG: User {username}@{domain} -> {total} emails found in {resolved_paths}")
     
-    # Exclude list for non-email files
-    exclude = ['dovecot', 'subscriptions', 'maildirfolder', 'maildirsize']
-    
-    walk_visited = False
-    try:
-        for root, dirs, files in os.walk(actual_path):
-            walk_visited = True
-            # Check if we are inside a 'new' folder for Maildir
-            is_new_dir = os.path.basename(root) == 'new'
-            for file in files:
-                # Basic filter to exclude Dovecot metadata
-                if any(file.startswith(ex) for ex in exclude):
-                    continue
-                    
-                total += 1
-                if is_new_dir:
-                    new += 1
-                try:
-                    fp = os.path.join(root, file)
-                    if not os.path.islink(fp):
-                        size_bytes += os.path.getsize(fp)
-                except:
-                    pass
-                    
-        if not walk_visited:
-            print(f"DEBUG: os.walk could not enter {actual_path} (Check permissions)")
-        else:
-            print(f"DEBUG: Found {total} emails in {actual_path}")
-    except Exception as e:
-        print(f"Error walking {actual_path}: {str(e)}")
-        
-    return total, new, format_size(size_bytes), actual_path
+    return total, new, format_size(size_bytes), resolved_paths[0] if resolved_paths else mail_dir
 
 def get_dir_size(path):
     total_size = 0
