@@ -9,9 +9,10 @@ import platform
 from fastapi import FastAPI, Depends, HTTPException, status, Request
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
-from fastapi.responses import FileResponse
+from fastapi.responses import FileResponse, StreamingResponse
 from sqlalchemy.orm import Session
 from tempfile import NamedTemporaryFile
+import asyncio
 
 import config
 import models, schemas, auth, database
@@ -1110,7 +1111,6 @@ def get_db_status(current_user: models.User = Depends(auth.get_current_admin_use
         "message": message,
         "timestamp": datetime.now()
     }
-
 @app.get("/api/system/logs/mail")
 def get_mail_logs(lines: int = 100, current_user: models.User = Depends(auth.get_current_admin_user)):
     log_paths = ['/var/log/mail.log', '/var/log/mail.err', '/var/log/mail.info']
@@ -1134,6 +1134,84 @@ def get_mail_logs(lines: int = 100, current_user: models.User = Depends(auth.get
             return {"logs": [f"Error al leer logs: {result.stderr}"]}
     except Exception as e:
         return {"logs": [f"Error de sistema: {str(e)}"]}
+
+@app.get("/api/system/logs/mail/auth")
+def get_auth_logs(lines: int = 100, email: Optional[str] = None, current_user: models.User = Depends(auth.get_current_admin_user)):
+    log_paths = ['/var/log/mail.log', '/var/log/mail.err', '/var/log/mail.info']
+    target_log = None
+    for path in log_paths:
+        if os.path.exists(path):
+            target_log = path
+            break
+            
+    if not target_log:
+        return {"logs": []}
+        
+    try:
+        # Markers for authentication
+        auth_patterns = ["Login:", "sasl_username=", "password verification failed", "authentication failed", "auth-worker", "passdb"]
+        
+        # Read the last N lines and filter
+        result = subprocess.run(['tail', '-n', '2000', target_log], capture_output=True, text=True)
+        if result.returncode != 0:
+            return {"logs": []}
+            
+        all_lines = result.stdout.splitlines()
+        auth_lines = []
+        
+        for line in all_lines:
+            if any(p in line for p in auth_patterns):
+                if not email or email in line:
+                    auth_lines.append(line)
+                    
+        # Return only requested number of lines (latest)
+        return {"logs": auth_lines[-lines:]}
+    except Exception as e:
+        return {"logs": [f"Error: {str(e)}"]}
+
+@app.get("/api/system/logs/auth/stream")
+async def stream_auth_logs(email: Optional[str] = None, current_user: models.User = Depends(auth.get_current_admin_user)):
+    async def auth_log_generator():
+        log_paths = ['/var/log/mail.log', '/var/log/mail.err', '/var/log/mail.info']
+        target_log = None
+        for path in log_paths:
+            if os.path.exists(path):
+                target_log = path
+                break
+                
+        if not target_log:
+            yield "data: Error: No log file found\n\n"
+            return
+
+        auth_patterns = ["Login:", "sasl_username=", "password verification failed", "authentication failed", "auth-worker", "passdb"]
+        
+        process = await asyncio.create_subprocess_exec(
+            'tail', '-f', '-n', '100', target_log,
+            stdout=asyncio.subprocess.PIPE,
+            stderr=asyncio.subprocess.PIPE
+        )
+        
+        try:
+            while True:
+                line = await process.stdout.readline()
+                if not line:
+                    break
+                decoded_line = line.decode('utf-8', errors='replace').strip()
+                if any(p in decoded_line for p in auth_patterns):
+                    if not email or email in decoded_line:
+                        yield f"data: {decoded_line}\n\n"
+        except asyncio.CancelledError:
+            process.terminate()
+            await process.wait()
+            raise
+        except Exception as e:
+            yield f"data: Error: {str(e)}\n\n"
+        finally:
+            if process.returncode is None:
+                process.terminate()
+                await process.wait()
+
+    return StreamingResponse(auth_log_generator(), media_type="text/event-stream")
 
 # Serve Frontend
 if os.path.exists(STATIC_DIR):

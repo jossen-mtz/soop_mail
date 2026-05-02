@@ -16,16 +16,13 @@ import {
   Eye,
   EyeOff,
   UserPlus,
-  Server,
   Shield,
   Activity,
   Database,
   Edit2,
   Terminal,
   Share2,
-  Copy,
   Save,
-  ArrowRight
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
 
@@ -75,16 +72,6 @@ const Dashboard: React.FC = () => {
     department: '',
     restart_soop_mail: true
   });
-  const [editPassword, setEditPassword] = useState({ password: '', password_confirm: '' });
-  
-  const [newUser, setNewUser] = useState({
-    email: '',
-    password: '',
-    password_confirm: '',
-    status: 'active',
-    department: '',
-    restart_soop_mail: true
-  });
   
   const activeTab = location.pathname === '/configuracion' ? 'settings' : 'users';
   
@@ -122,24 +109,63 @@ const Dashboard: React.FC = () => {
     full_name: user?.full_name || ''
   });
   
-  const [settingsTab, setSettingsTab] = useState<'profile' | 'server' | 'users' | 'logs' | 'mail-logs' | 'aliases' | 'forwarding'>('profile');
+  const [settingsTab, setSettingsTab] = useState<'profile' | 'server' | 'users' | 'logs' | 'mail-logs' | 'aliases' | 'forwarding' | 'auth-console'>('profile');
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
+  const [authConsoleLogs, setAuthConsoleLogs] = useState<string[]>([]);
+  const [isStreamingAuth, setIsStreamingAuth] = useState(false);
+  const [detailsTab, setDetailsTab] = useState<'general' | 'auth'>('general');
+  const [userAuthLogs, setUserAuthLogs] = useState<string[]>([]);
+  const [mailLogs, setMailLogs] = useState<any>(null);
+
   const [deleteConfig, setDeleteConfig] = useState<{
     title: string;
     message: string;
     onConfirm: () => void;
   } | null>(null);
 
-  const [mailLogs, setMailLogs] = useState<{logs: string[], path?: string} | null>(null);
-
   const fetchMailLogs = async () => {
     try {
       const response = await api.get('/api/system/logs/mail');
       setMailLogs(response.data);
-    } catch (err) {
+    } catch (error) {
+      console.error('Error fetching mail logs:', error);
       showNotification('Error al cargar logs de correo', 'error');
     }
   };
+
+  const fetchAuthLogs = async (email?: string) => {
+    try {
+      const url = email 
+        ? `/api/system/logs/mail/auth?email=${email}&lines=50`
+        : '/api/system/logs/mail/auth?lines=100';
+      const response = await api.get(url);
+      if (email) {
+        setUserAuthLogs(response.data.logs);
+      } else {
+        setAuthConsoleLogs(response.data.logs);
+      }
+    } catch (error) {
+      console.error('Error fetching auth logs:', error);
+    }
+  };
+
+  useEffect(() => {
+    let interval: any;
+    if (settingsTab === 'auth-console' && isStreamingAuth) {
+      fetchAuthLogs();
+      interval = setInterval(fetchAuthLogs, 3000);
+    }
+    return () => clearInterval(interval);
+  }, [settingsTab, isStreamingAuth]);
+
+  useEffect(() => {
+    let interval: any;
+    if (showViewModal && selectedMailUser && detailsTab === 'auth') {
+      fetchAuthLogs(selectedMailUser.email);
+      interval = setInterval(() => fetchAuthLogs(selectedMailUser.email), 5000);
+    }
+    return () => clearInterval(interval);
+  }, [showViewModal, selectedMailUser, detailsTab]);
 
   const fetchMailAliases = async () => {
     try {
@@ -428,24 +454,6 @@ const Dashboard: React.FC = () => {
     }
   };
 
-  const handleUpdateMailUserPassword = async (e: React.FormEvent) => {
-    e.preventDefault();
-    if (!selectedMailUser) return;
-    setActionLoading(true);
-    try {
-      await api.put(`/api/mail/users/${selectedMailUser.email}/password`, {
-        ...editPassword,
-        restart_soop_mail: true
-      });
-      showNotification('Contraseña actualizada exitosamente', 'success');
-      setShowEditModal(false);
-      setEditPassword({ password: '', password_confirm: '' });
-    } catch (err: any) {
-      showNotification(err.response?.data?.detail || 'Error al actualizar contraseña', 'error');
-    } finally {
-      setActionLoading(false);
-    }
-  };
 
   const handleCreateUser = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -919,11 +927,6 @@ const Dashboard: React.FC = () => {
             </header>
 
             {/* Sub Tabs */}
-            <div style={{ 
-              display: 'flex', 
-              gap: '0.5rem', 
-              marginBottom: '2rem', 
-              padding: '0.375rem', 
             <div style={{ display: 'flex', borderBottom: '1px solid #e2e8f0', marginBottom: '2rem', overflowX: 'auto' }}>
               <button 
                 onClick={() => setSettingsTab('profile')}
@@ -1052,6 +1055,24 @@ const Dashboard: React.FC = () => {
                     }}
                   >
                     Logs Mail
+                  </button>
+                  <button 
+                    onClick={() => setSettingsTab('auth-console')}
+                    style={{ 
+                      padding: '1rem 1.5rem', 
+                      borderBottom: settingsTab === 'auth-console' ? '2px solid #4f46e5' : '2px solid transparent',
+                      color: settingsTab === 'auth-console' ? '#4f46e5' : '#64748b',
+                      fontWeight: '600',
+                      fontSize: '0.875rem',
+                      background: 'none',
+                      borderTop: 'none',
+                      borderLeft: 'none',
+                      borderRight: 'none',
+                      cursor: 'pointer',
+                      whiteSpace: 'nowrap'
+                    }}
+                  >
+                    Consola Auth
                   </button>
                 </>
               )}
@@ -1657,7 +1678,7 @@ const Dashboard: React.FC = () => {
                         <div style={{ padding: '2rem', textAlign: 'center', color: '#64748b' }}>Cargando logs...</div>
                       ) : mailLogs.logs.length === 0 ? (
                         <div style={{ padding: '2rem', textAlign: 'center', color: '#64748b' }}>No hay registros disponibles.</div>
-                      ) : mailLogs.logs.map((line, idx) => (
+                      ) : mailLogs.logs.map((line: string, idx: number) => (
                         <div key={idx} style={{ 
                           padding: '0.125rem 0', 
                           borderBottom: '1px solid #1e293b40',
@@ -1669,6 +1690,86 @@ const Dashboard: React.FC = () => {
                             color: line.includes('error') || line.includes('fatal') || line.includes('reject') ? '#f87171' : 
                                    line.includes('warning') ? '#fbbf24' : 
                                    line.includes('connect from') ? '#60a5fa' : '#cbd5e1' 
+                          }}>
+                            {line}
+                          </span>
+                        </div>
+                      ))}
+                    </div>
+                  </motion.div>
+                )}
+
+                {settingsTab === 'auth-console' && (
+                  <motion.div 
+                    key="auth-console"
+                    initial={{ opacity: 0, x: 20 }}
+                    animate={{ opacity: 1, x: 0 }}
+                    exit={{ opacity: 0, x: -20 }}
+                    className="card" 
+                    style={{ padding: '0', overflow: 'hidden', background: '#0f172a', border: '1px solid #1e293b' }}
+                  >
+                    <div style={{ padding: '1.25rem 2rem', borderBottom: '1px solid #1e293b', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                      <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem' }}>
+                        <Terminal size={18} style={{ color: '#10b981' }} />
+                        <div>
+                          <h3 style={{ fontSize: '1.125rem', fontWeight: '700', color: '#f8fafc', marginBottom: '0.125rem' }}>Consola de Autenticación</h3>
+                          <p style={{ color: '#94a3b8', fontSize: '0.75rem' }}>Monitoreo en tiempo real de inicios de sesión y accesos SMTP/IMAP.</p>
+                        </div>
+                      </div>
+                      <div style={{ display: 'flex', gap: '0.5rem', alignItems: 'center' }}>
+                        <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', marginRight: '1rem' }}>
+                          <div style={{ 
+                            width: '8px', 
+                            height: '8px', 
+                            borderRadius: '50%', 
+                            background: isStreamingAuth ? '#10b981' : '#64748b',
+                            boxShadow: isStreamingAuth ? '0 0 8px #10b981' : 'none'
+                          }}></div>
+                          <span style={{ fontSize: '0.75rem', color: isStreamingAuth ? '#10b981' : '#94a3b8', fontWeight: '700' }}>
+                            {isStreamingAuth ? 'LIVE' : 'DETENIDO'}
+                          </span>
+                        </div>
+                        <button 
+                          onClick={() => setIsStreamingAuth(!isStreamingAuth)} 
+                          className="btn" 
+                          style={{ 
+                            background: isStreamingAuth ? '#ef4444' : '#10b981', 
+                            color: '#fff', 
+                            border: 'none', 
+                            padding: '0.375rem 0.75rem', 
+                            fontSize: '0.75rem',
+                            fontWeight: '700'
+                          }}
+                        >
+                          {isStreamingAuth ? 'Detener' : 'Iniciar'}
+                        </button>
+                        <button onClick={() => fetchAuthLogs()} className="btn" style={{ background: '#1e293b', color: '#f8fafc', border: 'none', padding: '0.5rem' }}>
+                          <RefreshCcw size={16} />
+                        </button>
+                      </div>
+                    </div>
+                    <div style={{ 
+                      maxHeight: '600px', 
+                      overflowY: 'auto', 
+                      padding: '1.5rem', 
+                      fontFamily: '"Fira Code", "Source Code Pro", monospace',
+                      fontSize: '0.813rem',
+                      lineHeight: '1.5',
+                      color: '#cbd5e1'
+                    }}>
+                      {authConsoleLogs.length === 0 ? (
+                        <div style={{ padding: '2rem', textAlign: 'center', color: '#64748b' }}>No hay registros disponibles.</div>
+                      ) : authConsoleLogs.map((line, idx) => (
+                        <div key={idx} style={{ 
+                          padding: '0.125rem 0', 
+                          borderBottom: '1px solid #1e293b40',
+                          display: 'flex',
+                          gap: '1rem'
+                        }}>
+                          <span style={{ color: '#475569', userSelect: 'none', minWidth: '2rem', textAlign: 'right' }}>{idx + 1}</span>
+                          <span style={{ 
+                            color: line.includes('password verification failed') || line.includes('authentication failed') ? '#f87171' : 
+                                   line.includes('Login:') ? '#10b981' : '#cbd5e1' 
                           }}>
                             {line}
                           </span>
@@ -2131,8 +2232,45 @@ const Dashboard: React.FC = () => {
                 <span style={{ fontWeight: '800', color: '#0369a1' }}>{selectedMailUser.email_count} correos</span>
               </div>
             </div>
+            <div style={{ display: 'flex', gap: '1rem', borderBottom: '1px solid #e2e8f0', marginBottom: '1.5rem' }}>
+              <button 
+                onClick={() => setDetailsTab('general')}
+                style={{
+                  padding: '0.75rem 1rem',
+                  borderBottom: detailsTab === 'general' ? '2px solid #4f46e5' : '2px solid transparent',
+                  color: detailsTab === 'general' ? '#4f46e5' : '#64748b',
+                  fontWeight: '700',
+                  fontSize: '0.875rem',
+                  background: 'none',
+                  borderTop: 'none',
+                  borderLeft: 'none',
+                  borderRight: 'none',
+                  cursor: 'pointer'
+                }}
+              >
+                General
+              </button>
+              <button 
+                onClick={() => setDetailsTab('auth')}
+                style={{
+                  padding: '0.75rem 1rem',
+                  borderBottom: detailsTab === 'auth' ? '2px solid #4f46e5' : '2px solid transparent',
+                  color: detailsTab === 'auth' ? '#4f46e5' : '#64748b',
+                  fontWeight: '700',
+                  fontSize: '0.875rem',
+                  background: 'none',
+                  borderTop: 'none',
+                  borderLeft: 'none',
+                  borderRight: 'none',
+                  cursor: 'pointer'
+                }}
+              >
+                Historial Autenticación
+              </button>
+            </div>
 
-            <div style={{ display: 'flex', flexDirection: 'column', gap: '1.5rem' }}>
+            {detailsTab === 'general' ? (
+              <div style={{ display: 'flex', flexDirection: 'column', gap: '1.5rem' }}>
               <div className="input-group">
                 <label>Dirección de Correo</label>
                 <div style={{ fontWeight: '700', color: '#1e293b', fontSize: '1.125rem', padding: '0.75rem 1rem', background: '#f8fafc', borderRadius: '0.75rem', border: '1px solid #e2e8f0' }}>
@@ -2200,7 +2338,6 @@ const Dashboard: React.FC = () => {
                   </div>
                 )}
               </div>
-            </div>
 
               <div className="input-group">
                 <label>Ruta de Almacenamiento (Home)</label>
@@ -2218,6 +2355,30 @@ const Dashboard: React.FC = () => {
                 </code>
               </div>
             </div>
+            ) : (
+              <div style={{ 
+                background: '#0f172a', 
+                borderRadius: '0.75rem', 
+                padding: '1rem', 
+                minHeight: '300px', 
+                maxHeight: '400px', 
+                overflowY: 'auto',
+                fontFamily: 'JetBrains Mono, monospace',
+                fontSize: '0.75rem'
+              }}>
+                {userAuthLogs.length > 0 ? (
+                  userAuthLogs.map((log, index) => (
+                    <div key={index} style={{ color: '#e2e8f0', marginBottom: '0.25rem', borderBottom: '1px solid #1e293b', paddingBottom: '0.25rem' }}>
+                      <span style={{ color: '#94a3b8' }}>[{new Date().toLocaleTimeString()}]</span> {log}
+                    </div>
+                  ))
+                ) : (
+                  <div style={{ color: '#64748b', textAlign: 'center', marginTop: '2rem' }}>
+                    No hay eventos de autenticación recientes.
+                  </div>
+                )}
+              </div>
+            )}
             
             <div style={{ display: 'flex', gap: '1rem', marginTop: '2.5rem' }}>
               <button 
