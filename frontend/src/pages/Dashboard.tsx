@@ -58,6 +58,8 @@ const Dashboard: React.FC = () => {
   });
   const [showAddAliasModal, setShowAddAliasModal] = useState(false);
   const [newAlias, setNewAlias] = useState({ email: '', destinations: '', is_dynamic: false });
+  const [recipientSearch, setRecipientSearch] = useState('');
+  const [showRecipientList, setShowRecipientList] = useState(false);
   const [showViewModal, setShowViewModal] = useState(false);
   const [showEditModal, setShowEditModal] = useState(false);
   const [selectedMailUser, setSelectedMailUser] = useState<MailUser | null>(null);
@@ -2646,7 +2648,7 @@ const Dashboard: React.FC = () => {
             <p style={{ color: '#64748b', fontSize: '0.875rem', marginBottom: '2rem' }}>Dirección virtual que redirige correos.</p>
             
             <form onSubmit={handleCreateAlias}>
-              <div className="input-group">
+              <div className="input-group" style={{ position: 'relative' }}>
                 <label>Email Virtual</label>
                 <input 
                   type="email" 
@@ -2655,21 +2657,93 @@ const Dashboard: React.FC = () => {
                   value={newAlias.email}
                   onChange={e => setNewAlias({...newAlias, email: e.target.value})}
                   required
+                  list="existing-aliases"
                 />
+                <datalist id="existing-aliases">
+                  {aliases.map(a => (
+                    <option key={a.email} value={a.email} />
+                  ))}
+                </datalist>
+                <p style={{ fontSize: '0.7rem', color: '#94a3b8', marginTop: '0.25rem' }}>
+                  Sugerencia: Evita duplicar alias existentes.
+                </p>
               </div>
-              <div className="input-group">
-                <label>Destinatarios (separados por coma)</label>
+              <div className="input-group" style={{ marginBottom: '1.5rem' }}>
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '0.5rem' }}>
+                  <label style={{ marginBottom: 0 }}>Destinatarios (separados por coma)</label>
+                  <button 
+                    type="button" 
+                    onClick={() => setShowRecipientList(!showRecipientList)}
+                    style={{ background: 'none', border: 'none', color: '#4f46e5', fontSize: '0.75rem', cursor: 'pointer', fontWeight: '600', display: 'flex', alignItems: 'center', gap: '0.25rem' }}
+                  >
+                    <Users size={14} />
+                    {showRecipientList ? 'Ocultar sugerencias' : 'Ver sugerencias'}
+                  </button>
+                </div>
+                
                 <textarea 
                   className="input-control" 
                   placeholder="real1@mmbtransporte.com, real2@gmail.com"
-                  style={{ minHeight: '80px', padding: '0.75rem' }}
+                  style={{ minHeight: '80px', padding: '0.75rem', fontSize: '0.875rem' }}
                   value={newAlias.destinations}
                   onChange={e => setNewAlias({...newAlias, destinations: e.target.value})}
                   required={!newAlias.is_dynamic}
                   disabled={newAlias.is_dynamic}
                 />
+
+                {showRecipientList && !newAlias.is_dynamic && (
+                  <div style={{ 
+                    marginTop: '0.5rem', 
+                    background: '#f8fafc', 
+                    borderRadius: '0.75rem', 
+                    border: '1px solid #e2e8f0',
+                    padding: '0.75rem'
+                  }}>
+                    <div style={{ position: 'relative', marginBottom: '0.75rem' }}>
+                      <Search size={14} style={{ position: 'absolute', left: '0.75rem', top: '50%', transform: 'translateY(-50%)', color: '#94a3b8' }} />
+                      <input 
+                        type="text" 
+                        placeholder="Buscar destinatario..."
+                        style={{ width: '100%', padding: '0.4rem 0.75rem 0.4rem 2.25rem', fontSize: '0.75rem', borderRadius: '0.5rem', border: '1px solid #e2e8f0' }}
+                        value={recipientSearch}
+                        onChange={e => setRecipientSearch(e.target.value)}
+                      />
+                    </div>
+                    <div style={{ maxHeight: '120px', overflowY: 'auto', display: 'flex', flexWrap: 'wrap', gap: '0.4rem' }}>
+                      {mailUsers
+                        .filter(u => u.email.toLowerCase().includes(recipientSearch.toLowerCase()))
+                        .map(u => (
+                          <button
+                            key={u.email}
+                            type="button"
+                            onClick={() => {
+                              const current = newAlias.destinations.trim();
+                              const updated = current ? `${current}, ${u.email}` : u.email;
+                              setNewAlias({...newAlias, destinations: updated});
+                            }}
+                            style={{ 
+                              padding: '0.25rem 0.5rem', 
+                              fontSize: '0.75rem', 
+                              background: '#ffffff', 
+                              border: '1px solid #e2e8f0', 
+                              borderRadius: '0.4rem',
+                              cursor: 'pointer',
+                              color: '#475569',
+                              transition: 'all 0.2s'
+                            }}
+                            onMouseOver={e => (e.currentTarget.style.borderColor = '#4f46e5')}
+                            onMouseOut={e => (e.currentTarget.style.borderColor = '#e2e8f0')}
+                          >
+                            {u.email.split('@')[0]}
+                          </button>
+                        ))
+                      }
+                    </div>
+                  </div>
+                )}
+                
                 <p style={{ fontSize: '0.7rem', color: '#94a3b8', marginTop: '0.5rem' }}>
-                  {newAlias.is_dynamic ? 'Al ser dinámica, incluirá automáticamente a todos los buzones activos.' : 'Puedes poner buzones locales o correos externos.'}
+                  {newAlias.is_dynamic ? 'Al ser dinámica, incluirá automáticamente a todos los buzones activos.' : 'Selecciona buzones locales de la lista o escribe correos externos.'}
                 </p>
               </div>
 

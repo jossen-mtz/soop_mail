@@ -228,7 +228,9 @@ def generate_soop_mail_hash(password: str):
 def generate_secure_password(length: int = 12):
     import secrets
     import string
-    alphabet = string.ascii_letters + string.digits + "!@#$%^&*"
+    # Usar un set de caracteres más seguro y compatible para clientes de correo
+    # Se eliminan caracteres como @, !, ^, * que pueden dar problemas en algunas configuraciones
+    alphabet = string.ascii_letters + string.digits + "._-$#"
     return ''.join(secrets.choice(alphabet) for i in range(length))
 
 def read_users_file():
