@@ -10,9 +10,16 @@ from database import check_db_connection, CONNECTION_LOGS
 
 def test_current_config():
     print("\n--- Probando Configuración Actual ---")
+    db_url = config.DATABASE_URL
+    masked_url = db_url.split("@")[-1]
+    user = db_url.split("//")[-1].split(":")[0]
+    
+    print(f"URL de base de datos detectada: mysql+pymysql://{user}:****@{masked_url}")
+    print(f"Archivo de configuración cargado: backend/.env.{os.getenv('APP_ENV', 'development')}")
+    
     success, message = check_db_connection()
     if success:
-        print(f"[OK] Conexión exitosa: {message}")
+        print(f"[OK] Conexión exitosa.")
     else:
         print(f"[ERROR] Fallo en la conexión: {message}")
     return success
