@@ -69,9 +69,21 @@ def test_manual_socket():
         print(f"[ERROR] Fallo en Socket: {e}")
         return False
 
+def print_summary():
+    print("\n" + "="*50)
+    print("DETALLES DE LA CONFIGURACIÓN A PROBAR:")
+    print(f"  Entorno:      {os.getenv('APP_ENV', 'development')}")
+    print(f"  Usuario:      {os.getenv('MYSQL_USER', 'root')}")
+    print(f"  Host:         {os.getenv('MYSQL_HOST', 'localhost')}")
+    print(f"  Puerto:       {os.getenv('MYSQL_PORT', '3306')}")
+    print(f"  Base de Datos: {os.getenv('MYSQL_DATABASE', 'soop_mail_admin')}")
+    print(f"  Socket:       {os.getenv('MYSQL_UNIX_SOCKET', 'No configurado')}")
+    print(f"  URL Directa:  {config.DATABASE_URL.split('@')[-1]} (password oculta)")
+    print("="*50 + "\n")
+
 if __name__ == "__main__":
     print("=== Suite de Pruebas de Conexión MySQL ===")
-    print(f"Entorno detectado: {os.getenv('APP_ENV', 'default')}")
+    print_summary()
     
     results = []
     results.append(test_current_config())
