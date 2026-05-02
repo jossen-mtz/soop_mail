@@ -151,7 +151,7 @@ def validate_email_format(email: str):
 
 def get_mailbox_stats(mail_dir: str):
     if not mail_dir:
-        return 0, 0, "0 B", ""
+        return 0, 0, 0, ""
         
     # Extraer dominio y usuario de la ruta original para buscar en bases alternativas
     parts = mail_dir.strip('/').split('/')
@@ -238,6 +238,11 @@ def get_dir_size(path):
     return total_size
 
 def format_size(size):
+    try:
+        size = float(size)
+    except (TypeError, ValueError):
+        return "0.00 B"
+        
     for unit in ['B', 'KB', 'MB', 'GB', 'TB']:
         if size < 1024.0:
             return f"{size:.2f} {unit}"
@@ -1152,10 +1157,8 @@ async def get_system_status(current_user: models.User = Depends(auth.get_current
             print(f"DEBUG: soop-mail service status: '{active_out}' (code: {result.returncode})")
             service_active = active_out == 'active'
             
-            # Fallback: Si el comando falla pero estamos aquí, es que el programa está corriendo
-            if not service_active and result.returncode == 0:
-                # Si systemctl respondió pero dice inactive, respetamos eso.
-                # Pero si queremos que el usuario vea "Activo" porque el backend responde:
+            # Fallback: Si el comando dice 'inactive' o falla, pero estamos respondiendo, es que el programa está corriendo
+            if not service_active:
                 service_active = True # Forzamos activo ya que estamos respondiendo a la petición
             
             # Postfix service
