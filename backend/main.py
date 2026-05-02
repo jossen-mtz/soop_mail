@@ -470,7 +470,8 @@ async def get_system_status(current_user: models.User = Depends(auth.get_current
         "dovecot_config_ok": dovecot_config_ok,
         "dovecot_config_error": dovecot_config_error,
         "db_connected": success_db,
-        "db_message": message_db
+        "db_message": message_db,
+        "database_logs": database.CONNECTION_LOGS
     }
     
     if os.name != 'nt':

@@ -4,21 +4,37 @@ from sqlalchemy.ext.declarative import declarative_base
 from sqlalchemy.orm import sessionmaker
 import config
 
+CONNECTION_LOGS = []
+
+def log_connection_attempt(url, success, error=None):
+    """Adds a log entry for a connection attempt."""
+    entry = {
+        "timestamp": datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
+        "strategy": "Socket" if "unix_socket" in url else "TCP",
+        "url": url.split("@")[-1], # Mask credentials
+        "success": success,
+        "error": error
+    }
+    CONNECTION_LOGS.append(entry)
+    # Keep only the last 10 logs
+    if len(CONNECTION_LOGS) > 10:
+        CONNECTION_LOGS.pop(0)
+
 def create_resilient_engine():
     """Tries to create an engine, falling back between Socket and TCP if necessary."""
     db_url = config.DATABASE_URL
     
-    # If the default URL fails, we can try to force a different strategy here
-    # But usually config.py has already chosen the 'best' one based on file existence
     try:
         engine = create_engine(db_url, pool_pre_ping=True)
-        # Test connection
         with engine.connect() as conn:
+            log_connection_attempt(db_url, True)
             pass
         return engine
     except Exception as e:
-        print(f"Failed to connect with {db_url}: {e}")
-        # If it was a socket attempt, try TCP as fallback
+        error_msg = str(e)
+        log_connection_attempt(db_url, False, error_msg)
+        print(f"Failed to connect with {db_url}: {error_msg}")
+        
         if "unix_socket" in db_url:
             db_user = os.getenv("MYSQL_USER", "root")
             db_pass = os.getenv("MYSQL_PASSWORD", "")
@@ -26,8 +42,17 @@ def create_resilient_engine():
             db_port = os.getenv("MYSQL_PORT", "3306")
             db_name = os.getenv("MYSQL_DATABASE", "soop_mail_admin")
             fallback_url = f"mysql+pymysql://{db_user}:{db_pass}@{db_host}:{db_port}/{db_name}"
-            print(f"Attempting fallback to TCP: {fallback_url}")
-            return create_engine(fallback_url, pool_pre_ping=True)
+            
+            try:
+                engine = create_engine(fallback_url, pool_pre_ping=True)
+                with engine.connect() as conn:
+                    log_connection_attempt(fallback_url, True)
+                    pass
+                print(f"Fallback to TCP successful")
+                return engine
+            except Exception as e2:
+                log_connection_attempt(fallback_url, False, str(e2))
+                raise e2
         raise e
 
 engine = create_resilient_engine()
@@ -45,7 +70,6 @@ def get_db():
 def check_db_connection():
     """Validates the MySQL connection and returns status/error."""
     try:
-        # Try to connect and execute a simple query
         with engine.connect() as connection:
             from sqlalchemy import text
             connection.execute(text("SELECT 1"))

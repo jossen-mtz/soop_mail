@@ -759,6 +759,47 @@ const Dashboard: React.FC = () => {
                       </div>
                     </div>
 
+                    {systemStatus?.details?.database_logs && (
+                      <div className="card" style={{ padding: '1.5rem', marginBottom: '1.5rem' }}>
+                        <h4 style={{ fontSize: '1rem', fontWeight: '700', color: '#1e293b', marginBottom: '1.25rem', display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+                          <Activity size={18} style={{ color: '#4f46e5' }} />
+                          Historial de Intentos de Conexión (MySQL)
+                        </h4>
+                        <div style={{ maxHeight: '200px', overflowY: 'auto' }}>
+                          <table style={{ fontSize: '0.813rem' }}>
+                            <thead>
+                              <tr style={{ textAlign: 'left' }}>
+                                <th style={{ padding: '0.5rem' }}>Hora</th>
+                                <th style={{ padding: '0.5rem' }}>Estrategia</th>
+                                <th style={{ padding: '0.5rem' }}>Estado</th>
+                                <th style={{ padding: '0.5rem' }}>Detalles</th>
+                              </tr>
+                            </thead>
+                            <tbody>
+                              {systemStatus.details.database_logs.map((log: any, idx: number) => (
+                                <tr key={idx} style={{ borderTop: '1px solid #f1f5f9' }}>
+                                  <td style={{ padding: '0.5rem' }}>{log.timestamp}</td>
+                                  <td style={{ padding: '0.5rem' }}>
+                                    <span className={`badge ${log.strategy === 'Socket' ? 'badge-primary' : 'badge-secondary'}`}>
+                                      {log.strategy}
+                                    </span>
+                                  </td>
+                                  <td style={{ padding: '0.5rem' }}>
+                                    <span style={{ color: log.success ? '#16a34a' : '#dc2626', fontWeight: '700' }}>
+                                      {log.success ? 'ÉXITO' : 'FALLO'}
+                                    </span>
+                                  </td>
+                                  <td style={{ padding: '0.5rem', maxWidth: '300px', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                                    {log.error || 'Conexión establecida'}
+                                  </td>
+                                </tr>
+                              ))}
+                            </tbody>
+                          </table>
+                        </div>
+                      </div>
+                    )}
+
                     <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '1.5rem' }}>
                       <div className="card" style={{ padding: '1.5rem' }}>
                         <h4 style={{ fontSize: '1rem', fontWeight: '700', color: '#1e293b', marginBottom: '1.25rem', display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
