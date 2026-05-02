@@ -24,7 +24,6 @@ import {
   Share2,
   Save,
   AlertTriangle,
-  Info,
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
 
