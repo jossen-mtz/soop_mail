@@ -213,14 +213,15 @@ def get_dir_size(path):
     total_size = 0
     if not os.path.exists(path):
         return 0
-    try:
-        for dirpath, dirnames, filenames in os.walk(path):
-            for f in filenames:
-                fp = os.path.join(dirpath, f)
+    for dirpath, dirnames, filenames in os.walk(path):
+        for f in filenames:
+            fp = os.path.join(dirpath, f)
+            try:
                 if not os.path.islink(fp):
                     total_size += os.path.getsize(fp)
-    except:
-        pass
+            except Exception as e:
+                # print(f"DEBUG: Error getting size for {fp}: {str(e)}")
+                pass
     return total_size
 
 def format_size(size):
@@ -1077,7 +1078,9 @@ async def get_system_status(current_user: models.User = Depends(auth.get_current
         if os.name != 'nt':
             # Main soop-mail service
             result = subprocess.run(['systemctl', 'is-active', 'soop-mail'], capture_output=True, text=True)
-            service_active = result.stdout.strip() == 'active'
+            active_out = result.stdout.strip()
+            print(f"DEBUG: soop-mail service status: '{active_out}' (code: {result.returncode})")
+            service_active = active_out == 'active'
             
             # Postfix service
             result = subprocess.run(['systemctl', 'is-active', 'postfix'], capture_output=True, text=True)
