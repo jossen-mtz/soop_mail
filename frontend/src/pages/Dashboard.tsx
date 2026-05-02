@@ -73,6 +73,18 @@ const Dashboard: React.FC = () => {
     if (val.includes('@')) return val;
     return `${val}@${DEFAULT_DOMAIN}`;
   };
+
+  const formatError = (err: any) => {
+    if (!err) return null;
+    if (typeof err === 'string') return err;
+    if (Array.isArray(err)) {
+      return err.map(e => e.msg || JSON.stringify(e)).join(', ');
+    }
+    if (typeof err === 'object') {
+      return err.msg || JSON.stringify(err);
+    }
+    return String(err);
+  };
   const [showViewModal, setShowViewModal] = useState(false);
   const [showEditModal, setShowEditModal] = useState(false);
   const [selectedMailUser, setSelectedMailUser] = useState<MailUser | null>(null);
@@ -220,7 +232,7 @@ const Dashboard: React.FC = () => {
           fetchMailUsers();
           setShowViewModal(false);
         } catch (err: any) {
-          showNotification(err.response?.data?.detail || 'Error al vaciar buzón', 'error');
+          showNotification(formatError(err.response?.data?.detail) || 'Error al vaciar buzón', 'error');
         } finally {
           setActionLoading(false);
           setShowDeleteConfirm(false);
@@ -241,7 +253,7 @@ const Dashboard: React.FC = () => {
       setNewForwarding({ email: '', target: '' });
       fetchForwardingRules();
     } catch (err: any) {
-      showNotification(err.response?.data?.detail || 'Error al crear regla', 'error');
+      showNotification(formatError(err.response?.data?.detail) || 'Error al crear regla', 'error');
     } finally {
       setActionLoading(false);
     }
@@ -283,7 +295,7 @@ const Dashboard: React.FC = () => {
       setNewAlias({ email: '', destinations: '', is_dynamic: false });
       fetchMailAliases();
     } catch (err: any) {
-      showNotification(err.response?.data?.detail || 'Error al crear alias', 'error');
+      showNotification(formatError(err.response?.data?.detail) || 'Error al crear alias', 'error');
     } finally {
       setActionLoading(false);
     }
@@ -457,7 +469,7 @@ const Dashboard: React.FC = () => {
       setEditMailUserData({ password: '', password_confirm: '', status: 'active', restart_soop_mail: true });
       fetchMailUsers();
     } catch (err: any) {
-      showNotification(err.response?.data?.detail || 'Error al actualizar usuario', 'error');
+      showNotification(formatError(err.response?.data?.detail) || 'Error al actualizar usuario', 'error');
     } finally {
       setActionLoading(false);
     }
@@ -486,7 +498,7 @@ const Dashboard: React.FC = () => {
       setNewUser({ email: '', password: '', password_confirm: '', status: 'active', restart_soop_mail: true });
       fetchMailUsers();
     } catch (err: any) {
-      showNotification(err.response?.data?.detail || 'Error al crear usuario', 'error');
+      showNotification(formatError(err.response?.data?.detail) || 'Error al crear usuario', 'error');
     } finally {
       setActionLoading(false);
     }
@@ -530,7 +542,7 @@ const Dashboard: React.FC = () => {
       });
       fetchSystemUsers();
     } catch (err: any) {
-      showNotification(err.response?.data?.detail || 'Error al crear usuario', 'error');
+      showNotification(formatError(err.response?.data?.detail) || 'Error al crear usuario', 'error');
     } finally {
       setActionLoading(false);
     }
@@ -549,7 +561,7 @@ const Dashboard: React.FC = () => {
       setShowEditSystemUserModal(false);
       fetchSystemUsers();
     } catch (err: any) {
-      showNotification(err.response?.data?.detail || 'Error al actualizar usuario', 'error');
+      showNotification(formatError(err.response?.data?.detail) || 'Error al actualizar usuario', 'error');
     } finally {
       setActionLoading(false);
     }
@@ -562,7 +574,7 @@ const Dashboard: React.FC = () => {
       await api.put('/api/auth/me', profileForm);
       showNotification('Perfil actualizado exitosamente', 'success');
     } catch (err: any) {
-      showNotification(err.response?.data?.detail || 'Error al actualizar perfil', 'error');
+      showNotification(formatError(err.response?.data?.detail) || 'Error al actualizar perfil', 'error');
     } finally {
       setActionLoading(false);
     }
@@ -601,7 +613,7 @@ const Dashboard: React.FC = () => {
       showNotification('Contraseña actualizada exitosamente', 'success');
       setPasswordForm({ current_password: '', new_password: '', confirm_password: '' });
     } catch (err: any) {
-      showNotification(err.response?.data?.detail || 'Error al actualizar contraseña', 'error');
+      showNotification(formatError(err.response?.data?.detail) || 'Error al actualizar contraseña', 'error');
     } finally {
       setActionLoading(false);
     }

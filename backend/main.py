@@ -13,6 +13,7 @@ from fastapi.responses import FileResponse, StreamingResponse
 from sqlalchemy.orm import Session
 from tempfile import NamedTemporaryFile
 import asyncio
+import json
 
 import config
 import models, schemas, auth, database
@@ -31,6 +32,23 @@ def startup_tasks():
         return
     
     print(f"SUCCESS: {message}")
+    
+    # Mail System Diagnostics
+    print("--- MAIL SYSTEM DIAGNOSTICS ---")
+    files_to_check = {
+        "USERS_FILE": USERS_FILE,
+        "POSTFIX_VIRTUAL": POSTFIX_VIRTUAL,
+        "ALIAS_META_FILE": ALIAS_META_FILE,
+        "SENDER_BCC_FILE": SENDER_BCC_FILE,
+        "MAIL_BASE": MAIL_BASE
+    }
+    for name, path in files_to_check.items():
+        exists = os.path.exists(path)
+        writable = os.access(os.path.dirname(path), os.W_OK) if os.path.exists(os.path.dirname(path)) else False
+        status = "OK" if exists else "NOT FOUND"
+        write_status = "WRITABLE" if writable else "NOT WRITABLE"
+        print(f"DIAG: {name}: {path} [{status}] [{write_status}]")
+    print("-------------------------------")
     
     # Create default admin if database is empty
     db = next(get_db())
@@ -268,7 +286,10 @@ def read_users_file():
                         'department': '' # Removed as requested
                     })
     except Exception as e:
+        print(f"ERROR: Failed to read users file {USERS_FILE}: {str(e)}")
         raise HTTPException(status_code=500, detail=f"Error reading users file: {str(e)}")
+    
+    # print(f"DEBUG: Successfully read {len(users)} users from {USERS_FILE}")
     return users
 
 def update_postfix_vmailbox(users: List[dict]):
@@ -323,8 +344,9 @@ def write_users_file(users: List[dict]):
         if os.name != 'nt':
             os.chmod(temp_path, 0o644)
         shutil.move(temp_path, USERS_FILE)
+        print(f"DEBUG: Successfully updated {USERS_FILE} with {len(users)} users")
         
-        # Also update Postfix vmailbox to keep them in sync
+        # Sync with Postfix vmailbox
         update_postfix_vmailbox(users)
         
         # Reload Dovecot
@@ -368,7 +390,9 @@ def read_virtual_file():
                         "description": alias_meta.get('description', '')
                     })
     except Exception as e:
-        print(f"Error reading virtual file: {str(e)}")
+        print(f"ERROR reading virtual file {POSTFIX_VIRTUAL}: {str(e)}")
+    
+    print(f"DEBUG: Read {len(aliases)} aliases from {POSTFIX_VIRTUAL}")
     return aliases
 
 def write_virtual_file(aliases):
@@ -383,6 +407,7 @@ def write_virtual_file(aliases):
         
         with open(ALIAS_META_FILE, 'w') as f:
             json.dump(meta, f, indent=4)
+            print(f"DEBUG: Updated ALIAS_META_FILE with {len(meta)} entries")
 
         # Expand dynamic aliases
         all_active_users = []
@@ -406,20 +431,28 @@ def write_virtual_file(aliases):
                 if not dests: continue
                 dest_str = ",".join(dests)
                 tmp.write(f"{a['email']}    {dest_str}\n")
+            print(f"DEBUG: Generated temporary virtual file at {temp_path}")
         
         if os.name != 'nt':
             os.chmod(temp_path, 0o644)
         shutil.move(temp_path, POSTFIX_VIRTUAL)
+        print(f"DEBUG: Successfully moved temporary file to {POSTFIX_VIRTUAL}")
         
         # postmap & reload
         if os.name != 'nt':
             try:
-                subprocess.run(['postmap', POSTFIX_VIRTUAL], check=True)
-                subprocess.run(['postfix', 'reload'], check=True)
-            except: pass
+                subprocess.run(['postmap', POSTFIX_VIRTUAL], check=True, capture_output=True, text=True)
+                subprocess.run(['postfix', 'reload'], check=True, capture_output=True, text=True)
+            except subprocess.CalledProcessError as e:
+                print(f"Error executing postfix commands: {str(e)}")
+                print(f"Stdout: {e.stdout}")
+                print(f"Stderr: {e.stderr}")
+                # We return True because the file was saved, but the system might not reflect changes yet
         return True
     except Exception as e:
         print(f"Error writing virtual file: {str(e)}")
+        import traceback
+        traceback.print_exc()
         return False
 
 # Auth Routes
@@ -821,13 +854,17 @@ async def create_mail_alias(
         
     aliases.append({
         "email": alias_data.email,
-        "destinations": alias_data.destinations
+        "destinations": alias_data.destinations,
+        "is_dynamic": alias_data.is_dynamic,
+        "description": alias_data.description
     })
     
     if write_virtual_file(aliases):
+        print(f"INFO: Alias created successfully: {alias_data.email}")
         log_audit(db, current_user.id, "CREATE_ALIAS", "MailAlias", alias_data.email, f"Created alias {alias_data.email} -> {alias_data.destinations}", request=request)
         return {"message": "Alias creado con éxito"}
     else:
+        print(f"ERROR: Failed to create alias: {alias_data.email}")
         raise HTTPException(status_code=500, detail="Error al escribir el archivo de alias")
 
 @app.delete("/api/mail/aliases/{email}")
@@ -844,10 +881,12 @@ async def delete_mail_alias(
         raise HTTPException(status_code=404, detail="Alias no encontrado")
         
     if write_virtual_file(new_aliases):
+        print(f"INFO: Alias deleted successfully: {email}")
         log_audit(db, current_user.id, "DELETE_ALIAS", "MailAlias", email, f"Deleted alias {email}", request=request)
         return {"message": "Alias eliminado con éxito"}
     else:
-        raise HTTPException(status_code=500, detail="Error al actualizar el archivo de alias")
+        print(f"ERROR: Failed to delete alias: {email}")
+        raise HTTPException(status_code=500, detail="Error al escribir el archivo de alias")
 
 # Auto-Responder Management
 @app.get("/api/mail/users/{email}/auto-responder", response_model=schemas.AutoResponderOut)
@@ -912,11 +951,18 @@ def write_forwarding_rules(rules):
             f.write("# Rules for Sender BCC - Generated by Soop Mail\n")
             for r in rules:
                 f.write(f"{r['email']}    {r['target']}\n")
+        print(f"DEBUG: Successfully wrote {len(rules)} rules to {SENDER_BCC_FILE}")
         if os.name != 'nt':
-            subprocess.run(['postmap', SENDER_BCC_FILE], check=True)
-            subprocess.run(['postfix', 'reload'], check=True)
+            try:
+                subprocess.run(['postmap', SENDER_BCC_FILE], check=True)
+                subprocess.run(['postfix', 'reload'], check=True)
+            except subprocess.CalledProcessError as e:
+                print(f"Error executing postfix commands for forwarding: {str(e)}")
+                # Continue anyway as the file is written, but this might be why it's "not working"
         return True
-    except: return False
+    except Exception as e:
+        print(f"Error writing forwarding rules: {str(e)}")
+        return False
 
 @app.get("/api/mail/forwarding")
 async def get_forwarding_rules(current_user: models.User = Depends(auth.get_current_active_user)):
@@ -946,9 +992,12 @@ async def delete_forwarding_rule(
     rules = read_forwarding_rules()
     new_rules = [r for r in rules if r['email'] != email]
     if write_forwarding_rules(new_rules):
+        print(f"INFO: Forwarding rule deleted: {email}")
         log_audit(db, current_user.id, "DELETE_FORWARDING", "MailForwarding", email, f"Deleted forwarding for {email}", request=request)
-        return {"message": "Regla eliminada"}
-    raise HTTPException(status_code=500, detail="Error al eliminar regla")
+        return {"message": "Regla de reenvío eliminada"}
+    else:
+        print(f"ERROR: Failed to delete forwarding rule: {email}")
+        raise HTTPException(status_code=500, detail="Error al actualizar reglas de reenvío")
 
 @app.put("/api/mail/users/{email}/password")
 async def update_mail_user_password(

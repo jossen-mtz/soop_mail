@@ -88,7 +88,7 @@ class SoopMailAlias(BaseModel):
 
 class SoopMailAliasCreate(BaseModel):
     email: str
-    destinations: str # Comma separated
+    destinations: List[str]
     is_dynamic: bool = False
     description: Optional[str] = None
 
