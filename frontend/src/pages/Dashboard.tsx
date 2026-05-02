@@ -23,6 +23,8 @@ import {
   Terminal,
   Share2,
   Save,
+  AlertTriangle,
+  Info,
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
 
@@ -1544,6 +1546,64 @@ const Dashboard: React.FC = () => {
                             </p>
                           )}
                         </div>
+
+                        {/* Postfix BCC Configuration Section */}
+                        <div style={{ marginTop: '2rem' }}>
+                          <h4 style={{ fontSize: '0.875rem', fontWeight: '700', color: '#1e293b', marginBottom: '1rem', display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+                            <Mail size={16} style={{ color: '#6366f1' }} />
+                            Configuración de Copias (BCC) en Postfix
+                          </h4>
+                          <div style={{ background: '#f8fafc', borderRadius: '1rem', padding: '1.25rem', border: '1px solid #e2e8f0' }}>
+                            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '1.5rem' }}>
+                              <div>
+                                <p style={{ fontSize: '0.7rem', color: '#64748b', fontWeight: '700', marginBottom: '0.5rem', textTransform: 'uppercase' }}>Sender BCC Maps</p>
+                                <div style={{ 
+                                  padding: '0.75rem', 
+                                  background: systemStatus?.details?.sender_bcc_config ? '#f1f5f9' : '#fee2e2', 
+                                  borderRadius: '0.5rem',
+                                  fontSize: '0.813rem',
+                                  fontFamily: 'monospace',
+                                  color: systemStatus?.details?.sender_bcc_config ? '#334155' : '#991b1b',
+                                  border: `1px solid ${systemStatus?.details?.sender_bcc_config ? '#e2e8f0' : '#fecdd3'}`
+                                }}>
+                                  {systemStatus?.details?.sender_bcc_config || 'NO CONFIGURADO'}
+                                </div>
+                              </div>
+                              <div>
+                                <p style={{ fontSize: '0.7rem', color: '#64748b', fontWeight: '700', marginBottom: '0.5rem', textTransform: 'uppercase' }}>Recipient BCC Maps</p>
+                                <div style={{ 
+                                  padding: '0.75rem', 
+                                  background: systemStatus?.details?.recipient_bcc_config ? '#f1f5f9' : '#fee2e2', 
+                                  borderRadius: '0.5rem',
+                                  fontSize: '0.813rem',
+                                  fontFamily: 'monospace',
+                                  color: systemStatus?.details?.recipient_bcc_config ? '#334155' : '#991b1b',
+                                  border: `1px solid ${systemStatus?.details?.recipient_bcc_config ? '#e2e8f0' : '#fecdd3'}`
+                                }}>
+                                  {systemStatus?.details?.recipient_bcc_config || 'NO CONFIGURADO'}
+                                </div>
+                              </div>
+                            </div>
+                            
+                            {(!systemStatus?.details?.sender_bcc_config || !systemStatus?.details?.recipient_bcc_config) && systemStatus?.details?.sender_bcc_config !== "Error checking postconf" && (
+                              <div style={{ marginTop: '1rem', padding: '1rem', background: '#fff7ed', borderRadius: '0.75rem', border: '1px solid #ffedd5', display: 'flex', gap: '0.75rem' }}>
+                                <AlertTriangle size={20} style={{ color: '#ea580c', flexShrink: 0 }} />
+                                <div>
+                                  <p style={{ fontSize: '0.813rem', fontWeight: '700', color: '#9a3412', marginBottom: '0.25rem' }}>Acción Requerida: Postfix no está procesando copias</p>
+                                  <p style={{ fontSize: '0.75rem', color: '#c2410c', lineHeight: '1.4' }}>
+                                    Para que las reglas de reenvío funcionen, debes añadir lo siguiente a <code style={{ background: '#ffedd5', padding: '0 2px' }}>/etc/postfix/main.cf</code>:
+                                    <pre style={{ marginTop: '0.5rem', padding: '0.5rem', background: '#fff', borderRadius: '0.25rem', fontSize: '0.7rem', color: '#431407', border: '1px solid #fed7aa', overflowX: 'auto' }}>
+                                      sender_bcc_maps = hash:/etc/postfix/sender_bcc{'\n'}
+                                      recipient_bcc_maps = hash:/etc/postfix/sender_bcc
+                                    </pre>
+                                    Luego reinicia Postfix: <code style={{ background: '#ffedd5', padding: '0 2px' }}>systemctl restart postfix</code>
+                                  </p>
+                                </div>
+                              </div>
+                            )}
+                          </div>
+                        </div>
+
                         {systemStatus?.details?.file_diagnostics?.aliases_meta?.write_status === 'READ_ONLY' && (
                           <div style={{ marginTop: '1rem', padding: '0.75rem', background: '#fffbeb', border: '1px solid #fef3c7', borderRadius: '0.5rem', display: 'flex', gap: '0.5rem', alignItems: 'flex-start' }}>
                             <AlertCircle size={16} style={{ color: '#d97706', marginTop: '0.125rem' }} />
