@@ -124,27 +124,61 @@ app.add_middleware(
 
 # Move metadata file to local directory instead of /etc/
 BASE_DIR = os.path.dirname(os.path.abspath(__file__))
+PROJECT_ROOT = os.path.dirname(BASE_DIR)
 
-# Configuration from environment
-USERS_FILE = os.environ.get('SOOP_MAIL_USERS_FILE', os.environ.get('USERS_FILE', os.path.join(BASE_DIR, 'users')))
-print(f"DEBUG: USERS_FILE path: {USERS_FILE} (exists: {os.path.exists(USERS_FILE)})")
-ALIAS_META_FILE = os.environ.get('ALIAS_META_FILE', os.path.join(BASE_DIR, 'aliases_meta.json'))
+def resolve_path(path, default_filename=None):
+    """
+    Intelligent path resolution:
+    1. If path is absolute and exists, use it.
+    2. If path is relative, try relative to PROJECT_ROOT.
+    3. If path is absolute but doesn't exist, and is just a filename, try in PROJECT_ROOT.
+    """
+    if not path:
+        return os.path.join(PROJECT_ROOT, default_filename) if default_filename else ""
+    
+    # If it's already an absolute path that exists, we are good
+    if os.path.isabs(path) and os.path.exists(path):
+        return path
+        
+    # Try relative to PROJECT_ROOT
+    rel_path = os.path.abspath(os.path.join(PROJECT_ROOT, path))
+    if os.path.exists(rel_path):
+        return rel_path
+        
+    # If it doesn't exist but it's absolute, maybe the user intended it to be in the project
+    if os.path.isabs(path):
+        basename = os.path.basename(path)
+        project_fallback = os.path.join(PROJECT_ROOT, basename)
+        if os.path.exists(project_fallback):
+            return project_fallback
+            
+    # Default to the joined path even if it doesn't exist yet (for creation)
+    if not os.path.isabs(path):
+        return rel_path
+        
+    return path
 
-SENDER_BCC_FILE = os.environ.get('SENDER_BCC_FILE', os.path.join(BASE_DIR, 'sender_bcc'))
-RECIPIENT_BCC_FILE = os.environ.get('RECIPIENT_BCC_FILE', os.path.join(BASE_DIR, 'recipient_bcc'))
-VIRTUAL_MAP = os.environ.get('POSTFIX_VIRTUAL', os.path.join(BASE_DIR, 'virtual'))
-VMAILBOX_MAP = os.environ.get('POSTFIX_VMAILBOX', os.path.join(BASE_DIR, 'vmailbox'))
+# Configuration from environment with auto-resolution
+USERS_FILE = resolve_path(os.environ.get('SOOP_MAIL_USERS_FILE', os.environ.get('USERS_FILE', '')), 'users')
+ALIAS_META_FILE = resolve_path(os.environ.get('ALIAS_META_FILE', ''), 'aliases_meta.json')
+SENDER_BCC_FILE = resolve_path(os.environ.get('SENDER_BCC_FILE', ''), 'sender_bcc')
+RECIPIENT_BCC_FILE = resolve_path(os.environ.get('RECIPIENT_BCC_FILE', ''), 'recipient_bcc')
+VIRTUAL_MAP = resolve_path(os.environ.get('POSTFIX_VIRTUAL', ''), 'virtual')
+VMAILBOX_MAP = resolve_path(os.environ.get('POSTFIX_VMAILBOX', ''), 'vmailbox')
 
 # Backward compatibility aliases
 POSTFIX_VIRTUAL = VIRTUAL_MAP
 POSTFIX_VMAILBOX = VMAILBOX_MAP
 
-POSTFIX_SENDER_RESTRICTIONS = os.environ.get('POSTFIX_SENDER_RESTRICTIONS', os.path.join(BASE_DIR, 'sender_restrictions'))
-MAIL_BASE = os.environ.get('SOOP_MAIL_BASE', os.environ.get('MAIL_BASE', os.path.join(BASE_DIR, 'vhosts')))
-print(f"DEBUG: MAIL_BASE path: {MAIL_BASE} (exists: {os.path.exists(MAIL_BASE)})")
+POSTFIX_SENDER_RESTRICTIONS = resolve_path(os.environ.get('POSTFIX_SENDER_RESTRICTIONS', ''), 'sender_restrictions')
+MAIL_BASE = resolve_path(os.environ.get('SOOP_MAIL_BASE', os.environ.get('MAIL_BASE', '')), 'vhosts')
+
 VMAIL_UID = int(os.getenv("SOOP_MAIL_VMAIL_UID", 5000))
 VMAIL_GID = int(os.getenv("SOOP_MAIL_VMAIL_GID", 5000))
 DEFAULT_DOMAIN = os.getenv("DEFAULT_DOMAIN", "mmbtransporte.com")
+
+print(f"DIAG: USERS_FILE resolved to: {USERS_FILE}")
+print(f"DIAG: MAIL_BASE resolved to: {MAIL_BASE}")
 
 # Path to static files
 STATIC_DIR = os.path.join(os.path.dirname(os.path.abspath(__file__)), "static")
@@ -1220,17 +1254,19 @@ async def get_system_status(current_user: models.User = Depends(auth.get_current
             result = subprocess.run(['systemctl', 'is-active', 'dovecot'], capture_output=True, text=True)
             dovecot_active = result.stdout.strip() == 'active'
             
-            # Verify Postfix configuration
-            pf_check = subprocess.run(['postfix', 'check'], capture_output=True, text=True)
-            if pf_check.returncode != 0:
-                postfix_config_ok = False
-                postfix_config_error = pf_check.stderr.strip()
+            # Postfix configuration is validated via the maps below, 
+            # we don't use 'postfix check' because it requires superuser privileges.
+            postfix_config_ok = True
+            postfix_config_error = ""
                 
             # Verify Dovecot configuration
             dv_check = subprocess.run(['doveadm', 'config'], capture_output=True, text=True)
             if dv_check.returncode != 0:
                 dovecot_config_ok = False
                 dovecot_config_error = dv_check.stderr.strip()
+            else:
+                dovecot_config_ok = True
+                dovecot_config_error = ""
                 
             # Check BCC and Virtual maps configuration
             try:

@@ -6,12 +6,16 @@ After=network.target
 User=www-data
 Group=www-data
 WorkingDirectory=/var/www/soop_mail
+# RESTAURA EL PATH COMPLETO PARA QUE ENCUENTRE POSTFIX Y OTROS COMANDOS
 Environment="PATH=/var/www/soop_mail/venv/bin:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin"
-# Es fundamental usar uvicorn.workers.UvicornWorker para FastAPI
-ExecStart=/var/www/soop_mail/venv/bin/gunicorn \
+Environment="PYTHONPATH=/var/www/soop_mail"
+
+ExecStart=/var/www/soop_mail/venv/bin/python -m gunicorn \
     --workers 3 \
     --worker-class uvicorn.workers.UvicornWorker \
     --bind unix:/var/www/soop_mail/soop_mail.sock \
+    --access-logfile - \
+    --error-logfile - \
     run:app
 
 [Install]
