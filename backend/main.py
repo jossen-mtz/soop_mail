@@ -1279,13 +1279,6 @@ async def get_system_status(current_user: models.User = Depends(auth.get_current
         total_size_bytes = get_dir_size(MAIL_BASE)
         
     details = {
-        "os": platform.system(),
-        "release": platform.release(),
-        "version": platform.version(),
-        "machine": platform.machine(),
-        "python_version": platform.python_version(),
-        "mail_base": MAIL_BASE,
-        "users_file": USERS_FILE,
         "current_time": datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
         "total_emails": total_emails,
         "total_new_emails": total_new,
@@ -1327,7 +1320,6 @@ async def get_system_status(current_user: models.User = Depends(auth.get_current
             writable = False
             
         file_diagnostics[name] = {
-            "path": path,
             "exists": exists,
             "writable": writable,
             "status": "OK" if exists else "NOT_FOUND",
@@ -1336,6 +1328,17 @@ async def get_system_status(current_user: models.User = Depends(auth.get_current
         }
     details["file_diagnostics"] = file_diagnostics
     
+    # Alertas de almacenamiento
+    storage_alerts = []
+    if not os.path.exists(MAIL_BASE):
+        storage_alerts.append(f"El directorio base de correo no existe.")
+    elif not os.access(MAIL_BASE, os.R_OK):
+        storage_alerts.append(f"No hay permisos de lectura para el directorio de correo.")
+    
+    if total_size_bytes == 0 and os.path.exists(MAIL_BASE):
+        storage_alerts.append("No se detectaron archivos de correo en el almacenamiento.")
+        
+    details["storage_alerts"] = storage_alerts
     if os.name != 'nt':
         try:
             with open('/proc/uptime', 'r') as f:

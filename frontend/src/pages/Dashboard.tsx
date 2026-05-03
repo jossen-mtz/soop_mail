@@ -1142,6 +1142,25 @@ const Dashboard: React.FC = () => {
                     exit={{ opacity: 0, x: -20 }}
                     style={{ display: 'grid', gap: '1.5rem' }}
                   >
+                    {systemStatus?.details?.storage_alerts?.length > 0 && (
+                      <div style={{ 
+                        padding: '1rem', 
+                        background: '#fff7ed', 
+                        borderLeft: '4px solid #f97316', 
+                        borderRadius: '0.5rem',
+                        marginBottom: '0.5rem'
+                      }}>
+                        <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem', marginBottom: '0.5rem' }}>
+                          <AlertTriangle size={18} style={{ color: '#f97316' }} />
+                          <h4 style={{ fontSize: '0.875rem', fontWeight: '700', color: '#9a3412' }}>Alertas de Almacenamiento</h4>
+                        </div>
+                        <ul style={{ margin: 0, paddingLeft: '1.5rem', fontSize: '0.813rem', color: '#7c2d12' }}>
+                          {systemStatus.details.storage_alerts.map((alert: string, i: number) => (
+                            <li key={i}>{alert}</li>
+                          ))}
+                        </ul>
+                      </div>
+                    )}
                     <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(300px, 1fr))', gap: '1.5rem' }}>
                       <div className="card" style={{ padding: '1.5rem', display: 'flex', flexDirection: 'column', gap: '1rem' }}>
                         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
@@ -1306,7 +1325,7 @@ const Dashboard: React.FC = () => {
                         <Terminal size={18} style={{ color: '#818cf8' }} />
                         <div>
                           <h3 style={{ fontSize: '1.125rem', fontWeight: '700', color: '#f8fafc', marginBottom: '0.125rem' }}>Logs del Servidor de Correo</h3>
-                          <p style={{ color: '#94a3b8', fontSize: '0.75rem' }}>{mailLogs?.path || 'Visor de /var/log/mail.log'}</p>
+                          <p style={{ color: '#94a3b8', fontSize: '0.75rem' }}>Visor de registros del sistema de correo</p>
                         </div>
                       </div>
                       <div style={{ display: 'flex', gap: '0.5rem' }}>

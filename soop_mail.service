@@ -6,7 +6,7 @@ After=network.target
 User=www-data
 Group=www-data
 WorkingDirectory=/var/www/soop_mail
-Environment="PATH=/var/www/soop_mail/venv/bin"
+Environment="PATH=/var/www/soop_mail/venv/bin:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin"
 # Es fundamental usar uvicorn.workers.UvicornWorker para FastAPI
 ExecStart=/var/www/soop_mail/venv/bin/gunicorn \
     --workers 3 \
