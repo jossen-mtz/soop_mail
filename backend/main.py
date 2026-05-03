@@ -158,8 +158,28 @@ def resolve_path(path, default_filename=None):
         
     return path
 
-# Configuration from environment with auto-resolution
-USERS_FILE = resolve_path(os.environ.get('SOOP_MAIL_USERS_FILE', os.environ.get('USERS_FILE', '')), 'users')
+# Auto-discovery for USERS_FILE
+def discover_users_file():
+    env_users = os.environ.get('SOOP_MAIL_USERS_FILE', os.environ.get('USERS_FILE', ''))
+    if env_users:
+        resolved = resolve_path(env_users, 'users')
+        if os.path.exists(resolved):
+            return resolved
+            
+    # Standard locations
+    candidates = [
+        "/etc/dovecot/users",
+        "/etc/postfix/users",
+        os.path.join(PROJECT_ROOT, 'users'),
+        os.path.join(BASE_DIR, 'users')
+    ]
+    for c in candidates:
+        if os.path.exists(c):
+            print(f"INFO: Auto-discovered USERS_FILE at: {c}")
+            return c
+    return resolve_path(env_users, 'users')
+
+USERS_FILE = discover_users_file()
 ALIAS_META_FILE = resolve_path(os.environ.get('ALIAS_META_FILE', ''), 'aliases_meta.json')
 SENDER_BCC_FILE = resolve_path(os.environ.get('SENDER_BCC_FILE', ''), 'sender_bcc')
 RECIPIENT_BCC_FILE = resolve_path(os.environ.get('RECIPIENT_BCC_FILE', ''), 'recipient_bcc')
@@ -171,7 +191,36 @@ POSTFIX_VIRTUAL = VIRTUAL_MAP
 POSTFIX_VMAILBOX = VMAILBOX_MAP
 
 POSTFIX_SENDER_RESTRICTIONS = resolve_path(os.environ.get('POSTFIX_SENDER_RESTRICTIONS', ''), 'sender_restrictions')
-MAIL_BASE = resolve_path(os.environ.get('SOOP_MAIL_BASE', os.environ.get('MAIL_BASE', '')), 'vhosts')
+
+# Auto-discovery for MAIL_BASE
+def discover_mail_base():
+    env_base = os.environ.get('SOOP_MAIL_BASE', os.environ.get('MAIL_BASE', ''))
+    if env_base:
+        resolved = resolve_path(env_base, 'vhosts')
+        if os.path.exists(resolved):
+            return resolved
+            
+    # Standard locations to check
+    candidates = [
+        "/var/mail/vhosts",
+        "/var/mail/soop_mail",
+        "/var/vmail",
+        os.path.join(PROJECT_ROOT, 'mail'),
+        os.path.join(PROJECT_ROOT, 'vhosts')
+    ]
+    
+    for c in candidates:
+        if os.path.exists(c) and os.access(c, os.R_OK):
+            # If it contains subdirectories, it's likely a valid mail base
+            try:
+                if any(os.path.isdir(os.path.join(c, d)) for d in os.listdir(c)):
+                    print(f"INFO: Auto-discovered MAIL_BASE at: {c}")
+                    return c
+            except: pass
+            
+    return resolve_path(env_base, 'vhosts') # Fallback to default logic
+
+MAIL_BASE = discover_mail_base()
 
 VMAIL_UID = int(os.getenv("SOOP_MAIL_VMAIL_UID", 5000))
 VMAIL_GID = int(os.getenv("SOOP_MAIL_VMAIL_GID", 5000))
@@ -1331,7 +1380,14 @@ async def get_system_status(current_user: models.User = Depends(auth.get_current
         "sender_bcc_config": sender_bcc_config if 'sender_bcc_config' in locals() else "N/A",
         "recipient_bcc_config": recipient_bcc_config if 'recipient_bcc_config' in locals() else "N/A",
         "virtual_alias_config": virtual_alias_config if 'virtual_alias_config' in locals() else "N/A",
-        "virtual_mailbox_config": virtual_mailbox_config if 'virtual_mailbox_config' in locals() else "N/A"
+        "virtual_mailbox_config": virtual_mailbox_config if 'virtual_mailbox_config' in locals() else "N/A",
+        "storage_diagnostics": {
+            "mail_base_path": MAIL_BASE,
+            "mail_base_exists": os.path.exists(MAIL_BASE),
+            "mail_base_writable": os.access(MAIL_BASE, os.W_OK) if os.path.exists(MAIL_BASE) else False,
+            "users_checked": len(users),
+            "mail_mailbox_bases": ["/var/mail/vhosts", "/var/mail/soop_mail"]
+        }
     }
     
     # Mail System Diagnostics
@@ -1396,6 +1452,51 @@ async def get_system_status(current_user: models.User = Depends(auth.get_current
         "service_active": service_active,
         "details": details
     }
+
+@app.get("/api/system/debug/storage")
+async def debug_storage(current_user: models.User = Depends(auth.get_current_admin_user)):
+    """Deep diagnostic tool for storage issues."""
+    results = {
+        "configured_base": MAIL_BASE,
+        "base_exists": os.path.exists(MAIL_BASE),
+        "base_readable": os.access(MAIL_BASE, os.R_OK),
+        "base_contents": [],
+        "user_paths_scanned": []
+    }
+    
+    if results["base_exists"]:
+        try:
+            results["base_contents"] = os.listdir(MAIL_BASE)[:20] # Limit to first 20
+        except Exception as e:
+            results["base_contents_error"] = str(e)
+            
+    users = read_users_file()
+    for u in users[:5]: # Debug first 5 users
+        email = u['email']
+        parts = email.split('@')
+        domain = parts[1] if len(parts) > 1 else DEFAULT_DOMAIN
+        username = parts[0]
+        
+        user_info = {
+            "email": email,
+            "configured_home": u['home'],
+            "checked_paths": []
+        }
+        
+        bases = ["/var/mail/vhosts", "/var/mail/soop_mail", os.path.dirname(os.path.dirname(u['home'] or "/"))]
+        for base in set(bases):
+            if not base or base == "/": continue
+            path = os.path.join(base, domain, username)
+            path_exists = os.path.exists(path)
+            user_info["checked_paths"].append({
+                "path": path,
+                "exists": path_exists,
+                "readable": os.access(path, os.R_OK) if path_exists else False,
+                "size": format_size(get_dir_size(path)) if path_exists else 0
+            })
+        results["user_paths_scanned"].append(user_info)
+        
+    return results
 
 @app.get("/api/system/db-status")
 def get_db_status(current_user: models.User = Depends(auth.get_current_admin_user)):
