@@ -98,3 +98,27 @@ Si el dashboard indica **0 total** pero existen archivos en el servidor, se debe
 *   `SOOP_MAIL_BASE`: `/var/mail/soop_mail`
 *   `SOOP_MAIL_USERS_FILE`: `/etc/dovecot/users`
 *   `DEFAULT_DOMAIN`: Dominio principal para resolución automática.
+
+---
+
+## 5. Reenvíos y Copias (BCC)
+
+El sistema permite gestionar cómo se redirigen o copian los correos de forma automática, cubriendo tanto el tráfico entrante como el saliente.
+
+### Tipos de Redirección
+
+1.  **Reenvíos (Virtual Aliases)**:
+    *   **Función**: Redirige correos que llegan a una dirección (que puede o no tener buzón físico) hacia uno o varios destinos externos.
+    *   **Copia Local**: Permite decidir si el correo original se queda en el buzón local (`keep_local`) o si solo se reenvía al destino.
+    *   **Archivo**: Se gestiona en `/etc/postfix/virtual`.
+
+2.  **Copias BCC (Supervisión)**:
+    *   **Salientes (Sender BCC)**: Permite configurar que, cada vez que un usuario **envíe** un correo, se envíe automáticamente una copia oculta a otra dirección. Es ideal para auditoría de lo que se envía.
+    *   **Entrantes (Recipient BCC)**: Permite configurar que, cada vez que un usuario **reciba** un correo, se envíe automáticamente una copia oculta a otra dirección. Complementa los reenvíos tradicionales permitiendo una supervisión silenciosa de lo que se recibe.
+    *   **Archivos**: Se gestionan en `/etc/postfix/sender_bcc` y `/etc/postfix/recipient_bcc`.
+
+### Flujo de Configuración
+Cuando se guarda una regla en el dashboard:
+1.  El backend escribe la entrada en el archivo correspondiente (`virtual`, `sender_bcc` o `recipient_bcc`).
+2.  Ejecuta `postmap` sobre el archivo modificado para generar la base de datos de Postfix (`.db`).
+3.  Recarga la configuración de Postfix para que los cambios tengan efecto inmediato.

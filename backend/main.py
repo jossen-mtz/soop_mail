@@ -45,9 +45,27 @@ def startup_tasks():
         "MAIL_BASE": MAIL_BASE
     }
     
-    # Ensure Postfix main.cf has BCC maps configured
+    # Ensure Postfix main.cf has BCC and Virtual maps configured
     if os.name != 'nt':
         _ensure_postfix_config()
+        
+        # Verify Postfix maps are correct
+        print("--- POSTFIX MAP VERIFICATION ---")
+        postfix_maps = {
+            "recipient_bcc_maps": f"hash:{RECIPIENT_BCC_FILE}",
+            "sender_bcc_maps": f"hash:{SENDER_BCC_FILE}",
+            "virtual_alias_maps": f"hash:{VIRTUAL_MAP}",
+            "virtual_mailbox_maps": f"hash:{VMAILBOX_MAP}"
+        }
+        for param, expected in postfix_maps.items():
+            try:
+                current = subprocess.run(['postconf', '-h', param], capture_output=True, text=True).stdout.strip()
+                if expected in current:
+                    print(f"OK: {param} is correctly configured")
+                else:
+                    print(f"WARNING: {param} is NOT pointing to {expected} (Current: {current})")
+            except Exception as e:
+                print(f"ERROR: Could not verify {param}: {str(e)}")
     
     # Initialize ALIAS_META_FILE if missing
     if not os.path.exists(ALIAS_META_FILE):
@@ -160,33 +178,62 @@ def validate_email_format(email: str):
     return re.match(pattern, email) is not None
 
 def _ensure_postfix_config():
-    """Checks and adds recipient/sender_bcc_maps to main.cf if missing."""
-    main_cf_path = "/etc/postfix/main.cf"
-    if not os.path.exists(main_cf_path):
+    """Checks and adds critical maps to main.cf if missing."""
+    if os.name == 'nt':
         return
-        
+
     try:
-        with open(main_cf_path, 'r') as f:
-            content = f.read()
-            
         changed = False
-        if "recipient_bcc_maps" not in content:
-            content += f"\nrecipient_bcc_maps = hash:{RECIPIENT_BCC_FILE}\n"
-            changed = True
-        if "sender_bcc_maps" not in content:
-            content += f"\nsender_bcc_maps = hash:{SENDER_BCC_FILE}\n"
-            changed = True
-            
-        if changed:
-            # Try to write back (requires root)
+        
+        # List of maps to ensure (Parameter, expected_value)
+        maps_to_ensure = [
+            ("recipient_bcc_maps", f"hash:{RECIPIENT_BCC_FILE}"),
+            ("sender_bcc_maps", f"hash:{SENDER_BCC_FILE}"),
+            ("virtual_alias_maps", f"hash:{VIRTUAL_MAP}"),
+            ("virtual_mailbox_maps", f"hash:{VMAILBOX_MAP}")
+        ]
+        
+        for param, expected in maps_to_ensure:
             try:
-                with open(main_cf_path, 'w') as f:
-                    f.write(content)
-                print(f"INFO: Updated {main_cf_path} with BCC map directives")
-            except PermissionError:
-                print(f"WARNING: No permission to update {main_cf_path}. Please add BCC maps manually.")
+                # Check current value
+                current = subprocess.run(['postconf', '-h', param], capture_output=True, text=True).stdout.strip()
+                
+                # If the expected value is not in current, we append it or set it
+                if not current:
+                    print(f"INFO: Setting {param} to {expected}")
+                    subprocess.run(['postconf', '-e', f"{param} = {expected}"], check=True)
+                    changed = True
+                elif expected not in current:
+                    # Append it if it's not there (comma separated)
+                    new_value = f"{current}, {expected}"
+                    print(f"INFO: Updating {param} to {new_value}")
+                    subprocess.run(['postconf', '-e', f"{param} = {new_value}"], check=True)
+                    changed = True
+            except Exception as e:
+                print(f"WARNING: Could not check/set {param}: {str(e)}")
+
+        # Ensure files exist and are indexed
+        for fpath in [RECIPIENT_BCC_FILE, SENDER_BCC_FILE, VIRTUAL_MAP, VMAILBOX_MAP]:
+            if not os.path.exists(fpath):
+                print(f"INFO: Creating missing Postfix map file: {fpath}")
+                try:
+                    os.makedirs(os.path.dirname(fpath), exist_ok=True)
+                    with open(fpath, 'w') as f:
+                        f.write(f"# Postfix map file: {os.path.basename(fpath)}\n")
+                    subprocess.run(['postmap', fpath], check=True)
+                    changed = True
+                except Exception as e:
+                    print(f"ERROR: Could not create/index {fpath}: {str(e)}")
+
+        if changed:
+            print("INFO: Reloading Postfix to apply changes")
+            try:
+                subprocess.run(['postfix', 'reload'], check=True)
+            except:
+                subprocess.run(['systemctl', 'reload', 'postfix'], check=True)
+
     except Exception as e:
-        print(f"ERROR: Could not check {main_cf_path}: {str(e)}")
+        print(f"ERROR: General failure in _ensure_postfix_config: {str(e)}")
 
 def get_mailbox_stats(mail_dir: str):
     if not mail_dir:
@@ -1306,16 +1353,24 @@ async def get_system_status(current_user: models.User = Depends(auth.get_current
                 dovecot_config_ok = False
                 dovecot_config_error = dv_check.stderr.strip()
                 
-            # Check BCC maps configuration
+            # Check BCC and Virtual maps configuration
             try:
                 s_bcc = subprocess.run(['postconf', '-h', 'sender_bcc_maps'], capture_output=True, text=True)
-                details["sender_bcc_config"] = s_bcc.stdout.strip()
+                sender_bcc_config = s_bcc.stdout.strip()
                 
                 r_bcc = subprocess.run(['postconf', '-h', 'recipient_bcc_maps'], capture_output=True, text=True)
-                details["recipient_bcc_config"] = r_bcc.stdout.strip()
+                recipient_bcc_config = r_bcc.stdout.strip()
+
+                v_alias = subprocess.run(['postconf', '-h', 'virtual_alias_maps'], capture_output=True, text=True)
+                virtual_alias_config = v_alias.stdout.strip()
+
+                v_mailbox = subprocess.run(['postconf', '-h', 'virtual_mailbox_maps'], capture_output=True, text=True)
+                virtual_mailbox_config = v_mailbox.stdout.strip()
             except:
-                details["sender_bcc_config"] = "Error checking postconf"
-                details["recipient_bcc_config"] = "Error checking postconf"
+                sender_bcc_config = "Error checking postconf"
+                recipient_bcc_config = "Error checking postconf"
+                virtual_alias_config = "Error checking postconf"
+                virtual_mailbox_config = "Error checking postconf"
         else:
             # Mock for Windows dev
             service_active = True
@@ -1364,7 +1419,11 @@ async def get_system_status(current_user: models.User = Depends(auth.get_current
         "dovecot_config_error": dovecot_config_error,
         "db_connected": success_db,
         "db_message": message_db,
-        "database_logs": database.CONNECTION_LOGS
+        "database_logs": database.CONNECTION_LOGS,
+        "sender_bcc_config": sender_bcc_config if 'sender_bcc_config' in locals() else "N/A",
+        "recipient_bcc_config": recipient_bcc_config if 'recipient_bcc_config' in locals() else "N/A",
+        "virtual_alias_config": virtual_alias_config if 'virtual_alias_config' in locals() else "N/A",
+        "virtual_mailbox_config": virtual_mailbox_config if 'virtual_mailbox_config' in locals() else "N/A"
     }
     
     # Mail System Diagnostics

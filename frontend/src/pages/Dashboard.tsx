@@ -1758,16 +1758,16 @@ const Dashboard: React.FC = () => {
                                       });
                                       setShowEditSystemUserModal(true);
                                     }}
-                                    className="btn btn-secondary"
-                                    style={{ color: '#f59e0b', border: 'none', background: 'transparent', boxShadow: 'none' }}
+                                    className="btn-icon"
+                                    style={{ color: '#f59e0b' }}
                                   >
                                     <Edit2 size={18} />
                                   </button>
                                   <button 
                                     onClick={() => handleDeleteSystemUser(u.id, u.username)}
                                     disabled={u.id === user?.id}
-                                    className="btn btn-secondary"
-                                    style={{ color: u.id === user?.id ? '#cbd5e1' : '#ef4444', border: 'none', background: 'transparent', boxShadow: 'none' }}
+                                    className="btn-icon"
+                                    style={{ color: u.id === user?.id ? '#cbd5e1' : '#ef4444' }}
                                   >
                                     <Trash2 size={18} />
                                   </button>
@@ -1980,7 +1980,7 @@ const Dashboard: React.FC = () => {
                       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1.5rem' }}>
                         <div>
                           <h3 style={{ fontSize: '1rem', fontWeight: '700', color: '#1e293b' }}>Reenvíos</h3>
-                          <p style={{ fontSize: '0.813rem', color: '#64748b' }}>Redirección de correos a destinos externos.</p>
+                          <p style={{ fontSize: '0.813rem', color: '#64748b' }}>Redirección de correos entrantes a destinos externos.</p>
                         </div>
                         <button className="btn btn-primary" onClick={() => setShowAddForwardModal(true)}>
                           <Plus size={16} />
@@ -2051,7 +2051,7 @@ const Dashboard: React.FC = () => {
                       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1.5rem' }}>
                         <div>
                           <h3 style={{ fontSize: '1rem', fontWeight: '700', color: '#1e293b' }}>Copias (BCC)</h3>
-                          <p style={{ fontSize: '0.813rem', color: '#64748b' }}>Copia oculta automática de correos (supervisión).</p>
+                          <p style={{ fontSize: '0.813rem', color: '#64748b' }}>Copia oculta automática de correos <b>enviados y recibidos</b>.</p>
                         </div>
                         <button className="btn btn-primary" onClick={() => setShowAddForwardingModal(true)}>
                           <Plus size={16} />
@@ -2166,8 +2166,8 @@ const Dashboard: React.FC = () => {
                                 <td style={{ textAlign: 'right' }}>
                                   <button 
                                     onClick={() => handleDeleteAlias(alias.email)}
-                                    className="btn btn-secondary"
-                                    style={{ color: '#ef4444', border: 'none', background: 'transparent', boxShadow: 'none' }}
+                                    className="btn-icon"
+                                    style={{ color: '#ef4444' }}
                                   >
                                     <Trash2 size={18} />
                                   </button>
@@ -3172,7 +3172,7 @@ const Dashboard: React.FC = () => {
             style={{ width: '100%', maxWidth: '480px', padding: '2.5rem', border: 'none' }}
           >
             <h2 style={{ fontSize: '1.5rem', fontWeight: '800', marginBottom: '0.5rem', color: '#1e293b' }}>Nueva Copia BCC</h2>
-            <p style={{ color: '#64748b', fontSize: '0.875rem', marginBottom: '2rem' }}>Enviar copia oculta automática de correos.</p>
+            <p style={{ color: '#64748b', fontSize: '0.875rem', marginBottom: '2rem' }}>Enviar copia oculta automática de correos (enviados o recibidos).</p>
             
             <form onSubmit={handleCreateBCCRule}>
               <div style={{ display: 'flex', gap: '1rem', marginBottom: '1.5rem' }}>

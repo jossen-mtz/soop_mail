@@ -85,6 +85,28 @@ button, input, select, textarea {
   border-color: var(--secondary);
 }
 
+.btn-icon {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  padding: 0.5rem;
+  background: transparent;
+  border: none;
+  border-radius: 0.5rem;
+  cursor: pointer;
+  transition: all 0.2s ease;
+  color: inherit;
+}
+
+.btn-icon:hover {
+  background-color: var(--surface-hover);
+  transform: scale(1.05);
+}
+
+.btn-icon:active {
+  transform: scale(0.95);
+}
+
 .card {
   background-color: var(--surface);
   border: 1px solid var(--border);
