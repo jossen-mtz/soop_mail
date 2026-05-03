@@ -22,6 +22,8 @@ import {
   Terminal,
   Share2,
   Save,
+  FileText,
+  AlertTriangle,
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
 
