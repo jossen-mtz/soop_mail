@@ -704,7 +704,7 @@ async def change_password(
     
     return {"message": "Password changed successfully"}
 
-@app.get("/api/system/logs", response_model=List[schemas.AuditLogOut])
+@app.get("/api/system/audit-logs", response_model=List[schemas.AuditLogOut])
 async def get_audit_logs(
     limit: int = 100,
     db: Session = Depends(get_db),
@@ -1509,21 +1509,23 @@ if os.path.exists(STATIC_DIR):
 
     @app.get("/{full_path:path}")
     async def serve_frontend(full_path: str):
-        # If it's an API route, let it pass (though FastAPI handles this by order)
+        # API requests that reach here are truly Not Found
         if full_path.startswith("api/"):
-            raise HTTPException(status_code=404)
+            raise HTTPException(status_code=404, detail="API endpoint not found")
         
-        # Check if the file exists in static
+        # 1. Try to serve exact file from static
         file_path = os.path.join(STATIC_DIR, full_path)
         if full_path and os.path.isfile(file_path):
             return FileResponse(file_path)
             
-        # Otherwise serve index.html for SPA routing
+        # 2. Otherwise serve index.html (SPA logic)
         index_path = os.path.join(STATIC_DIR, "index.html")
         if os.path.exists(index_path):
             return FileResponse(index_path)
         
-        raise HTTPException(status_code=404, detail="Static files not found")
+        raise HTTPException(status_code=404, detail="Frontend build (index.html) not found in static folder")
+else:
+    print(f"WARNING: STATIC_DIR not found at {STATIC_DIR}. Frontend will not be served.")
 
 if __name__ == "__main__":
     import uvicorn
