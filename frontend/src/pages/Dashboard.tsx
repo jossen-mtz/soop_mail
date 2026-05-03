@@ -15,7 +15,6 @@ import {
   Settings,
   Eye,
   EyeOff,
-  UserPlus,
   Shield,
   Activity,
   Database,
@@ -23,7 +22,6 @@ import {
   Terminal,
   Share2,
   Save,
-  AlertTriangle,
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
 
@@ -42,14 +40,12 @@ const Dashboard: React.FC = () => {
   const { user, logout } = useAuth();
   const location = useLocation();
   const [mailUsers, setMailUsers] = useState<MailUser[]>([]);
-  const [systemUsers, setSystemUsers] = useState<any[]>([]);
   const [aliases, setAliases] = useState<any[]>([]);
   const [bccRules, setBccRules] = useState<{sender: any[], recipient: any[]}>({ sender: [], recipient: [] });
   const [forwards, setForwards] = useState<any[]>([]);
   const [newForward, setNewForward] = useState({ source: '', destinations: '', keep_local: true, description: '' });
   const [showAddForwardModal, setShowAddForwardModal] = useState(false);
   const [bccMode, setBccMode] = useState<'sender' | 'recipient'>('sender');
-  const [auditLogs, setAuditLogs] = useState<any[]>([]);
   const [systemStatus, setSystemStatus] = useState<any>(null);
   const [loading, setLoading] = useState(true);
   const [searchTerm, setSearchTerm] = useState('');
@@ -154,6 +150,15 @@ const Dashboard: React.FC = () => {
       }
     } catch (error) {
       console.error('Error fetching auth logs:', error);
+    }
+  };
+
+  const fetchAuditLogs = async () => {
+    try {
+      const response = await api.get('/api/system/audit-logs');
+      setAuditLogs(response.data);
+    } catch (error) {
+      console.error('Error fetching audit logs:', error);
     }
   };
 
@@ -2230,92 +2235,6 @@ const Dashboard: React.FC = () => {
         </div>
       )}
 
-      {/* Edit System User Modal */}
-      {showEditSystemUserModal && editingSystemUser && (
-        <div style={{ 
-          position: 'fixed', 
-          inset: 0, 
-          background: 'rgba(15, 23, 42, 0.4)', 
-          backdropFilter: 'blur(8px)',
-          display: 'flex', 
-          alignItems: 'center', 
-          justifyContent: 'center',
-          zIndex: 100
-        }}>
-          <motion.div 
-            initial={{ scale: 0.9, opacity: 0, y: 20 }}
-            animate={{ scale: 1, opacity: 1, y: 0 }}
-            className="card" 
-            style={{ width: '100%', maxWidth: '500px', padding: '2.5rem', border: 'none', boxShadow: '0 25px 50px -12px rgba(0, 0, 0, 0.25)' }}
-          >
-            <h2 style={{ fontSize: '1.5rem', fontWeight: '800', marginBottom: '0.5rem', color: '#1e293b' }}>Editar Acceso</h2>
-            <p style={{ color: '#64748b', fontSize: '0.875rem', marginBottom: '2rem' }}>Editando configuración para <strong>{editingSystemUser.username}</strong>.</p>
-            
-            <form onSubmit={handleUpdateSystemUser}>
-              <div className="input-group">
-                <label>Nombre Completo</label>
-                <input 
-                  type="text" 
-                  className="input-control" 
-                  value={editSystemUserData.full_name}
-                  onChange={e => setEditSystemUserData({...editSystemUserData, full_name: e.target.value})}
-                />
-              </div>
-
-              <div className="input-group">
-                <label>Correo Electrónico</label>
-                <input 
-                  type="email" 
-                  className="input-control" 
-                  value={editSystemUserData.email}
-                  onChange={e => setEditSystemUserData({...editSystemUserData, email: e.target.value})}
-                  required
-                />
-              </div>
-
-              <div className="input-group">
-                <label style={{ display: 'flex', justifyContent: 'space-between' }}>
-                  Nueva Contraseña (dejar en blanco para no cambiar)
-                  <button 
-                    type="button" 
-                    onClick={() => handleGeneratePassword('system-edit')}
-                    style={{ background: 'none', border: 'none', color: '#4f46e5', fontSize: '0.75rem', cursor: 'pointer', fontWeight: '600' }}
-                  >
-                    Generar segura
-                  </button>
-                </label>
-                <input 
-                  type="password" 
-                  className="input-control" 
-                  placeholder="••••••••"
-                  value={editSystemUserData.password}
-                  onChange={e => setEditSystemUserData({...editSystemUserData, password: e.target.value})}
-                />
-              </div>
-
-              <div style={{ display: 'flex', gap: '1.5rem', marginBottom: '2rem' }}>
-                <label style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', cursor: 'pointer', marginBottom: 0 }}>
-                  <input 
-                    type="checkbox" 
-                    checked={editSystemUserData.is_active}
-                    onChange={e => setEditSystemUserData({...editSystemUserData, is_active: e.target.checked})}
-                    disabled={editingSystemUser.id === user?.id}
-                    style={{ width: '16px', height: '16px' }}
-                  />
-                  <span style={{ fontSize: '0.875rem', color: '#475569' }}>Activo</span>
-                </label>
-              </div>
-              
-              <div style={{ display: 'flex', gap: '1rem', justifyContent: 'flex-end' }}>
-                <button type="button" onClick={() => setShowEditSystemUserModal(false)} className="btn btn-secondary">Cancelar</button>
-                <button type="submit" className="btn btn-primary" disabled={actionLoading}>
-                  {actionLoading ? 'Actualizando...' : 'Actualizar Usuario'}
-                </button>
-              </div>
-            </form>
-          </motion.div>
-        </div>
-      )}
 
       {/* Add Alias Modal */}
       {showAddAliasModal && (

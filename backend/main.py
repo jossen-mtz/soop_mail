@@ -1089,6 +1089,7 @@ async def delete_bcc_rule(
 
 # New Forwards Endpoints
 @app.get("/api/mail/forwards")
+@app.get("/api/mail/forwarding")
 async def get_mail_forwards(current_user: models.User = Depends(auth.get_current_active_user)):
     entries = read_virtual_file()
     return [e for e in entries if e.get('is_forward')]
