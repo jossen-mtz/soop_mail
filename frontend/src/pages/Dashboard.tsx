@@ -1308,6 +1308,76 @@ const Dashboard: React.FC = () => {
                         </div>
                       </div>
                     </div>
+
+                    <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(450px, 1fr))', gap: '1.5rem' }}>
+                      {/* Postfix Configuration Details */}
+                      <div className="card" style={{ padding: '1.5rem' }}>
+                        <h4 style={{ fontSize: '1rem', fontWeight: '700', color: '#1e293b', marginBottom: '1rem', display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+                          <Shield size={18} style={{ color: '#6366f1' }} />
+                          Configuración Postfix (MTA)
+                        </h4>
+                        <div style={{ display: 'grid', gap: '0.75rem' }}>
+                          {[
+                            { label: 'Sender BCC Maps', value: systemStatus?.details?.sender_bcc_config },
+                            { label: 'Recipient BCC Maps', value: systemStatus?.details?.recipient_bcc_config },
+                            { label: 'Virtual Alias Maps', value: systemStatus?.details?.virtual_alias_config },
+                            { label: 'Virtual Mailbox Maps', value: systemStatus?.details?.virtual_mailbox_config }
+                          ].map((item, idx) => (
+                            <div key={idx} style={{ padding: '0.75rem', background: '#f8fafc', borderRadius: '0.5rem', border: '1px solid #f1f5f9' }}>
+                              <div style={{ fontSize: '0.7rem', color: '#64748b', fontWeight: '600', textTransform: 'uppercase', marginBottom: '0.25rem' }}>{item.label}</div>
+                              <div style={{ fontSize: '0.813rem', color: '#1e293b', fontFamily: 'monospace', wordBreak: 'break-all' }}>{item.value || 'No configurado'}</div>
+                            </div>
+                          ))}
+                          {systemStatus?.details?.postfix_config_error && (
+                            <div style={{ padding: '0.75rem', background: '#fff1f2', borderRadius: '0.5rem', border: '1px solid #ffe4e6', color: '#e11d48', fontSize: '0.75rem' }}>
+                              <strong>Error de Postfix:</strong> {systemStatus.details.postfix_config_error}
+                            </div>
+                          )}
+                        </div>
+                      </div>
+
+                      {/* File Permissions & Diagnostics */}
+                      <div className="card" style={{ padding: '1.5rem' }}>
+                        <h4 style={{ fontSize: '1rem', fontWeight: '700', color: '#1e293b', marginBottom: '1rem', display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+                          <FileText size={18} style={{ color: '#0ea5e9' }} />
+                          Permisos de Archivos y Diagnóstico
+                        </h4>
+                        <div style={{ display: 'grid', gap: '0.5rem' }}>
+                          {systemStatus?.details?.file_diagnostics && Object.entries(systemStatus.details.file_diagnostics).map(([key, data]: [string, any]) => (
+                            <div key={key} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '0.625rem', borderBottom: '1px solid #f1f5f9' }}>
+                              <span style={{ fontSize: '0.813rem', color: '#475569', fontWeight: '500' }}>{key}</span>
+                              <div style={{ display: 'flex', gap: '0.5rem' }}>
+                                <span style={{ 
+                                  fontSize: '0.7rem', 
+                                  padding: '0.125rem 0.5rem', 
+                                  borderRadius: '1rem', 
+                                  background: data.exists ? '#dcfce7' : '#fee2e2',
+                                  color: data.exists ? '#166534' : '#991b1b',
+                                  fontWeight: '600'
+                                }}>
+                                  {data.exists ? 'Existe' : 'No encontrado'}
+                                </span>
+                                <span style={{ 
+                                  fontSize: '0.7rem', 
+                                  padding: '0.125rem 0.5rem', 
+                                  borderRadius: '1rem', 
+                                  background: data.writable ? '#dcfce7' : '#fee2e2',
+                                  color: data.writable ? '#166534' : '#991b1b',
+                                  fontWeight: '600'
+                                }}>
+                                  {data.writable ? 'Escritura OK' : 'Solo Lectura'}
+                                </span>
+                              </div>
+                            </div>
+                          ))}
+                          {systemStatus?.details?.dovecot_config_error && (
+                            <div style={{ marginTop: '0.5rem', padding: '0.75rem', background: '#fff1f2', borderRadius: '0.5rem', border: '1px solid #ffe4e6', color: '#e11d48', fontSize: '0.75rem' }}>
+                              <strong>Error de Dovecot:</strong> {systemStatus.details.dovecot_config_error}
+                            </div>
+                          )}
+                        </div>
+                      </div>
+                    </div>
                   </motion.div>
                 )}
 
