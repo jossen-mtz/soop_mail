@@ -151,8 +151,8 @@ STATIC_DIR = os.path.join(os.path.dirname(os.path.abspath(__file__)), "static")
 
 # Helper Functions
 def log_audit(db: Session, user_id: Optional[int], action: str, resource_type: str = None, resource_id: str = None, details: str = None, request: Request = None):
-    ip = request.client.host if request else None
-    ua = request.headers.get("user-agent") if request else None
+    ip = request.client.host if request and request.client else None
+    ua = request.headers.get("user-agent") if request and hasattr(request, 'headers') else None
     db_item = models.AuditLog(
         user_id=user_id,
         action=action,
@@ -687,6 +687,7 @@ async def update_user_me(
 @app.post("/api/auth/change-password")
 async def change_password(
     data: schemas.UserPasswordChange,
+    request: Request,
     db: Session = Depends(get_db),
     current_user: models.User = Depends(auth.get_current_active_user)
 ):
@@ -699,7 +700,7 @@ async def change_password(
     current_user.password_hash = auth.get_password_hash(data.new_password)
     db.commit()
     
-    log_audit(db, current_user.id, "CHANGE_PASSWORD", "User", str(current_user.id), "User changed their own password")
+    log_audit(db, current_user.id, "CHANGE_PASSWORD", "User", str(current_user.id), "User changed their own password", request=request)
     
     return {"message": "Password changed successfully"}
 
@@ -711,100 +712,6 @@ async def get_audit_logs(
 ):
     logs = db.query(models.AuditLog).order_by(models.AuditLog.created_at.desc()).limit(limit).all()
     return logs
-
-# System User Management
-@app.get("/api/system/users", response_model=List[schemas.UserOut])
-async def get_system_users(
-    db: Session = Depends(get_db),
-    current_user: models.User = Depends(auth.get_current_admin_user)
-):
-    return db.query(models.User).all()
-
-@app.post("/api/system/users", response_model=schemas.UserOut)
-async def create_system_user(
-    user_data: schemas.UserCreate,
-    request: Request,
-    db: Session = Depends(get_db),
-    current_user: models.User = Depends(auth.get_current_admin_user)
-):
-    # Check if username or email already exists
-    if db.query(models.User).filter(models.User.username == user_data.username).first():
-        raise HTTPException(status_code=400, detail="Username already registered")
-    if db.query(models.User).filter(models.User.email == user_data.email).first():
-        raise HTTPException(status_code=400, detail="Email already registered")
-    
-    new_user = models.User(
-        username=user_data.username,
-        email=user_data.email,
-        full_name=user_data.full_name,
-        is_active=user_data.is_active,
-        password_hash=auth.get_password_hash(user_data.password)
-    )
-    db.add(new_user)
-    db.commit()
-    db.refresh(new_user)
-    
-    log_audit(db, current_user.id, "CREATE_SYSTEM_USER", "User", str(new_user.id), f"Created system user {new_user.username}", request=request)
-    
-    return new_user
-
-@app.put("/api/system/users/{user_id}", response_model=schemas.UserOut)
-async def update_system_user(
-    user_id: int,
-    user_data: schemas.UserUpdate,
-    request: Request,
-    db: Session = Depends(get_db),
-    current_user: models.User = Depends(auth.get_current_admin_user)
-):
-    user = db.query(models.User).filter(models.User.id == user_id).first()
-    if not user:
-        raise HTTPException(status_code=404, detail="Usuario no encontrado")
-        
-    if user_data.email and user_data.email != user.email:
-        if db.query(models.User).filter(models.User.email == user_data.email).first():
-            raise HTTPException(status_code=400, detail="El correo electrónico ya está registrado")
-        user.email = user_data.email
-        
-    if user_data.full_name is not None:
-        user.full_name = user_data.full_name
-        
-        
-    if user_data.is_active is not None:
-        if user_id == current_user.id and not user_data.is_active:
-            raise HTTPException(status_code=400, detail="No puedes desactivar tu propia cuenta")
-        user.is_active = user_data.is_active
-        
-    if user_data.password:
-        user.password_hash = auth.get_password_hash(user_data.password)
-        
-    db.commit()
-    db.refresh(user)
-    
-    log_audit(db, current_user.id, "UPDATE_SYSTEM_USER", "User", str(user.id), f"Actualizado usuario de sistema: {user.username}", request=request)
-    
-    return user
-
-@app.delete("/api/system/users/{user_id}")
-async def delete_system_user(
-    user_id: int,
-    request: Request,
-    db: Session = Depends(get_db),
-    current_user: models.User = Depends(auth.get_current_admin_user)
-):
-    if user_id == current_user.id:
-        raise HTTPException(status_code=400, detail="Cannot delete your own account")
-        
-    user = db.query(models.User).filter(models.User.id == user_id).first()
-    if not user:
-        raise HTTPException(status_code=404, detail="User not found")
-        
-    username = user.username
-    db.delete(user)
-    db.commit()
-    
-    log_audit(db, current_user.id, "DELETE_SYSTEM_USER", "User", str(user_id), f"Deleted system user {username}", request=request)
-    
-    return {"message": "User deleted successfully"}
 
 # User Management (Mail Users)
 @app.get("/api/mail/users", response_model=List[schemas.SoopMailUserBase])

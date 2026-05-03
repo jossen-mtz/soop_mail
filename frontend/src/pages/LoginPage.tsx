@@ -174,7 +174,7 @@ const LoginPage: React.FC = () => {
 
         <div style={{ marginTop: '2.5rem', textAlign: 'center' }}>
           <div style={{ fontSize: '0.813rem', color: '#94a3b8' }}>
-            &copy; 2026 soop Group. Todos los derechos reservados.
+            &copy; 2026 sarsoop labs. Todos los derechos reservados.
           </div>
         </div>
       </motion.div>

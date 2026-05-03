@@ -102,45 +102,28 @@ const Dashboard: React.FC = () => {
   
   const activeTab = location.pathname === '/configuracion' ? 'settings' : 'users';
   
-  const [showAddSystemUserModal, setShowAddSystemUserModal] = useState(false);
-  const [newSystemUser, setNewSystemUser] = useState({
-    username: '',
-    email: '',
-    full_name: '',
-    password: '',
-    is_active: true
-  });
   const [showPassword, setShowPassword] = useState(false);
-  const [showSettingsPassword, setShowSettingsPassword] = useState(false);
-  const [passwordForm, setPasswordForm] = useState({
-    current_password: '',
-    new_password: '',
-    confirm_password: ''
-  });
   const [actionLoading, setActionLoading] = useState(false);
   const [notification, setNotification] = useState<{message: string, type: 'success' | 'error'} | null>(null);
   
-  const [showEditSystemUserModal, setShowEditSystemUserModal] = useState(false);
-  const [editingSystemUser, setEditingSystemUser] = useState<any>(null);
-  const [editSystemUserData, setEditSystemUserData] = useState({
-    email: '',
-    full_name: '',
-    password: '',
-    is_active: true
-  });
-
-  const [profileForm, setProfileForm] = useState({
-    email: user?.email || '',
-    full_name: user?.full_name || ''
-  });
-  
-  const [settingsTab, setSettingsTab] = useState<'profile' | 'server' | 'users' | 'logs' | 'mail-logs' | 'aliases' | 'forwards' | 'bcc' | 'auth-console'>('profile');
+  const [settingsTab, setSettingsTab] = useState<'profile' | 'server' | 'logs' | 'mail-logs' | 'aliases' | 'forwards' | 'bcc' | 'auth-console'>('profile');
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
   const [authConsoleLogs, setAuthConsoleLogs] = useState<string[]>([]);
   const [isStreamingAuth, setIsStreamingAuth] = useState(false);
   const [detailsTab, setDetailsTab] = useState<'general' | 'auth'>('general');
   const [userAuthLogs, setUserAuthLogs] = useState<string[]>([]);
   const [mailLogs, setMailLogs] = useState<any>(null);
+  const [auditLogs, setAuditLogs] = useState<any[]>([]);
+  const [profileForm, setProfileForm] = useState({
+    email: user?.email || '',
+    full_name: user?.full_name || ''
+  });
+  const [passwordForm, setPasswordForm] = useState({
+    current_password: '',
+    new_password: '',
+    confirm_password: ''
+  });
+  const [showSettingsPassword, setShowSettingsPassword] = useState(false);
 
   const [deleteConfig, setDeleteConfig] = useState<{
     title: string;
@@ -419,24 +402,6 @@ const Dashboard: React.FC = () => {
     }
   };
 
-  const fetchAuditLogs = async () => {
-    try {
-      const response = await api.get('/api/system/logs');
-      setAuditLogs(response.data);
-    } catch (err) {
-      console.error('Error fetching logs', err);
-    }
-  };
-
-  const fetchSystemUsers = async () => {
-    try {
-      const response = await api.get('/api/system/users');
-      setSystemUsers(response.data);
-    } catch (err) {
-      console.error('Error fetching system users', err);
-    }
-  };
-
   const fetchSystemStatus = async () => {
     try {
       const response = await api.get('/api/system/status');
@@ -450,31 +415,27 @@ const Dashboard: React.FC = () => {
     if (activeTab === 'settings') {
       if (settingsTab === 'logs') fetchAuditLogs();
       if (settingsTab === 'server') fetchSystemStatus();
-      if (settingsTab === 'users') fetchSystemUsers();
       if (settingsTab === 'mail-logs') fetchMailLogs();
       if (settingsTab === 'aliases') fetchMailAliases();
       if (settingsTab === 'forwards') fetchForwards();
       if (settingsTab === 'bcc') fetchBCCRules();
     }
-  }, [activeTab, settingsTab]);
+  }, [settingsTab, activeTab]);
 
   useEffect(() => {
     fetchMailUsers();
-    if (user) {
-      fetchSystemUsers();
-      fetchAuditLogs();
-    }
     fetchMailAliases();
-    fetchForwardingRules();
+    fetchForwards();
     fetchSystemStatus();
     if (activeTab === 'settings') {
-      document.title = 'Configuración | soop MAIL';
+      document.title = 'Configuración | sarsoop labs';
       setProfileForm({
         email: user?.email || '',
         full_name: user?.full_name || ''
       });
+      fetchAuditLogs();
     } else {
-      document.title = 'Usuarios | soop MAIL';
+      document.title = 'Usuarios | sarsoop labs';
     }
   }, [activeTab, user]);
 
@@ -483,7 +444,34 @@ const Dashboard: React.FC = () => {
     setTimeout(() => setNotification(null), 5000);
   };
 
-  const handleGeneratePassword = async (target: 'new' | 'edit' | 'profile' | 'system-new' | 'system-edit') => {
+  const handleUpdateProfile = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setActionLoading(true);
+    try {
+      await api.put('/api/auth/me', profileForm);
+      showNotification('Perfil actualizado exitosamente', 'success');
+    } catch (err: any) {
+      showNotification(formatError(err.response?.data?.detail) || 'Error al actualizar perfil', 'error');
+    } finally {
+      setActionLoading(false);
+    }
+  };
+
+  const handleChangePassword = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setActionLoading(true);
+    try {
+      await api.post('/api/auth/change-password', passwordForm);
+      showNotification('Contraseña actualizada exitosamente', 'success');
+      setPasswordForm({ current_password: '', new_password: '', confirm_password: '' });
+    } catch (err: any) {
+      showNotification(formatError(err.response?.data?.detail) || 'Error al actualizar contraseña', 'error');
+    } finally {
+      setActionLoading(false);
+    }
+  };
+
+  const handleGeneratePassword = async (target: 'new' | 'edit' | 'profile') => {
     try {
       const response = await api.get('/api/system/utils/generate-password');
       const pwd = response.data.password;
@@ -494,10 +482,6 @@ const Dashboard: React.FC = () => {
         setEditMailUserData(prev => ({ ...prev, password: pwd, password_confirm: pwd }));
       } else if (target === 'profile') {
         setPasswordForm(prev => ({ ...prev, new_password: pwd, confirm_password: pwd }));
-      } else if (target === 'system-new') {
-        setNewSystemUser(prev => ({ ...prev, password: pwd }));
-      } else if (target === 'system-edit') {
-        setEditSystemUserData(prev => ({ ...prev, password: pwd }));
       }
       
       showNotification('Contraseña segura generada', 'success');
@@ -537,7 +521,6 @@ const Dashboard: React.FC = () => {
     e.preventDefault();
     setActionLoading(true);
     try {
-      // Automatically append domain if only username is provided
       let email = newUser.email;
       if (email && !email.includes('@')) {
         email = `${email}@mmbtransporte.com`;
@@ -582,99 +565,6 @@ const Dashboard: React.FC = () => {
     setShowDeleteConfirm(true);
   };
 
-  const handleCreateSystemUser = async (e: React.FormEvent) => {
-    e.preventDefault();
-    setActionLoading(true);
-    try {
-      await api.post('/api/system/users', newSystemUser);
-      showNotification('Usuario de acceso creado', 'success');
-      setShowAddSystemUserModal(false);
-      setNewSystemUser({
-        username: '',
-        email: '',
-        full_name: '',
-        password: '',
-        is_active: true
-      });
-      fetchSystemUsers();
-    } catch (err: any) {
-      showNotification(formatError(err.response?.data?.detail) || 'Error al crear usuario', 'error');
-    } finally {
-      setActionLoading(false);
-    }
-  };
-
-  const handleUpdateSystemUser = async (e: React.FormEvent) => {
-    e.preventDefault();
-    if (!editingSystemUser) return;
-    setActionLoading(true);
-    try {
-      const payload: any = { ...editSystemUserData };
-      if (!payload.password) delete payload.password;
-      
-      await api.put(`/api/system/users/${editingSystemUser.id}`, payload);
-      showNotification('Usuario actualizado exitosamente', 'success');
-      setShowEditSystemUserModal(false);
-      fetchSystemUsers();
-    } catch (err: any) {
-      showNotification(formatError(err.response?.data?.detail) || 'Error al actualizar usuario', 'error');
-    } finally {
-      setActionLoading(false);
-    }
-  };
-
-  const handleUpdateProfile = async (e: React.FormEvent) => {
-    e.preventDefault();
-    setActionLoading(true);
-    try {
-      await api.put('/api/auth/me', profileForm);
-      showNotification('Perfil actualizado exitosamente', 'success');
-    } catch (err: any) {
-      showNotification(formatError(err.response?.data?.detail) || 'Error al actualizar perfil', 'error');
-    } finally {
-      setActionLoading(false);
-    }
-  };
-
-  const handleDeleteSystemUser = (id: number, username: string) => {
-    if (id === user?.id) {
-      showNotification('No puedes eliminar tu propia cuenta', 'error');
-      return;
-    }
-    setDeleteConfig({
-      title: 'Eliminar Acceso al Sistema',
-      message: `¿Estás seguro de eliminar el acceso de ${username}?`,
-      onConfirm: async () => {
-        setActionLoading(true);
-        try {
-          await api.delete(`/api/system/users/${id}`);
-          showNotification('Usuario eliminado', 'success');
-          fetchSystemUsers();
-        } catch (err) {
-          showNotification('Error al eliminar usuario', 'error');
-        } finally {
-          setActionLoading(false);
-          setShowDeleteConfirm(false);
-        }
-      }
-    });
-    setShowDeleteConfirm(true);
-  };
-
-  const handleChangePassword = async (e: React.FormEvent) => {
-    e.preventDefault();
-    setActionLoading(true);
-    try {
-      await api.post('/api/auth/change-password', passwordForm);
-      showNotification('Contraseña actualizada exitosamente', 'success');
-      setPasswordForm({ current_password: '', new_password: '', confirm_password: '' });
-    } catch (err: any) {
-      showNotification(formatError(err.response?.data?.detail) || 'Error al actualizar contraseña', 'error');
-    } finally {
-      setActionLoading(false);
-    }
-  };
-
   const filteredUsers = mailUsers.filter(u => {
     return u.email.toLowerCase().includes(searchTerm.toLowerCase());
   });
@@ -685,7 +575,6 @@ const Dashboard: React.FC = () => {
 
   return (
     <div className="dashboard-layout" style={{ display: 'flex', minHeight: '100vh', backgroundColor: '#f1f5f9' }}>
-      {/* Sidebar */}
       <aside className="sidebar" style={{ 
         width: '280px', 
         background: '#ffffff', 
@@ -786,7 +675,6 @@ const Dashboard: React.FC = () => {
         </div>
       </aside>
 
-      {/* Main Content */}
       <main style={{ flex: 1, padding: '2.5rem', overflowY: 'auto' }}>
         {activeTab === 'users' ? (
           <div style={{ width: '100%' }}>
@@ -800,7 +688,6 @@ const Dashboard: React.FC = () => {
                 Nuevo Usuario
               </button>
             </header>
-            {/* Stats Grid */}
             <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(240px, 1fr))', gap: '1.5rem', marginBottom: '2.5rem' }}>
               <div className="card" style={{ padding: '1.5rem', display: 'flex', alignItems: 'center', gap: '1.25rem', border: 'none', background: 'linear-gradient(135deg, #4f46e5 0%, #6366f1 100%)', color: '#ffffff' }}>
                 <div style={{ background: 'rgba(255, 255, 255, 0.2)', width: '48px', height: '48px', borderRadius: '1rem', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
@@ -833,7 +720,6 @@ const Dashboard: React.FC = () => {
               </div>
             </div>
 
-            {/* Search and Table */}
             <div className="card" style={{ padding: '0', border: '1px solid #e2e8f0', overflow: 'hidden' }}>
               <div style={{ padding: '1.25rem 1.5rem', borderBottom: '1px solid #f1f5f9', display: 'flex', justifyContent: 'space-between', alignItems: 'center', backgroundColor: '#ffffff' }}>
                 <div style={{ display: 'flex', gap: '1rem', flex: 1, flexWrap: 'wrap' }}>
@@ -974,7 +860,6 @@ const Dashboard: React.FC = () => {
               <p style={{ color: '#64748b', fontSize: '0.938rem' }}>Administra el sistema y revisa el estado del servidor.</p>
             </header>
 
-            {/* Sub Tabs */}
             <div style={{ display: 'flex', borderBottom: '1px solid #e2e8f0', marginBottom: '2rem', overflowX: 'auto' }}>
               <button 
                 onClick={() => setSettingsTab('profile')}
@@ -1065,24 +950,6 @@ const Dashboard: React.FC = () => {
                 }}
               >
                 Copias (BCC)
-              </button>
-              <button 
-                onClick={() => setSettingsTab('users')}
-                style={{ 
-                  padding: '1rem 1.5rem', 
-                  borderBottom: settingsTab === 'users' ? '2px solid #4f46e5' : '2px solid transparent',
-                  color: settingsTab === 'users' ? '#4f46e5' : '#64748b',
-                  fontWeight: '600',
-                  fontSize: '0.875rem',
-                  background: 'none',
-                  borderTop: 'none',
-                  borderLeft: 'none',
-                  borderRight: 'none',
-                  cursor: 'pointer',
-                  whiteSpace: 'nowrap'
-                }}
-              >
-                Accesos
               </button>
               <button 
                 onClick={() => setSettingsTab('logs')}
@@ -1262,7 +1129,6 @@ const Dashboard: React.FC = () => {
                     </div>
                   </motion.div>
                 )}
-
                 {settingsTab === 'server' && (
                   <motion.div 
                     key="server"
@@ -1417,411 +1283,6 @@ const Dashboard: React.FC = () => {
                           </div>
                         </div>
                       </div>
-                    </div>
-
-                    {systemStatus?.details?.database_logs && (
-                      <div className="card" style={{ padding: '1.5rem', marginBottom: '1.5rem' }}>
-                        <h4 style={{ fontSize: '1rem', fontWeight: '700', color: '#1e293b', marginBottom: '1.25rem', display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
-                          <Activity size={18} style={{ color: '#4f46e5' }} />
-                          Historial de Intentos de Conexión (MySQL)
-                        </h4>
-                        <div style={{ maxHeight: '200px', overflowY: 'auto' }}>
-                          <table style={{ fontSize: '0.813rem' }}>
-                            <thead>
-                              <tr style={{ textAlign: 'left' }}>
-                                <th style={{ padding: '0.5rem' }}>Hora</th>
-                                <th style={{ padding: '0.5rem' }}>Estrategia</th>
-                                <th style={{ padding: '0.5rem' }}>Estado</th>
-                                <th style={{ padding: '0.5rem' }}>Detalles</th>
-                              </tr>
-                            </thead>
-                            <tbody>
-                              {systemStatus.details.database_logs.map((log: any, idx: number) => (
-                                <tr key={idx} style={{ borderTop: '1px solid #f1f5f9' }}>
-                                  <td style={{ padding: '0.5rem' }}>{log.timestamp}</td>
-                                  <td style={{ padding: '0.5rem' }}>
-                                    <span className={`badge ${log.strategy === 'Socket' ? 'badge-primary' : 'badge-secondary'}`}>
-                                      {log.strategy}
-                                    </span>
-                                  </td>
-                                  <td style={{ padding: '0.5rem' }}>
-                                    <span style={{ color: log.success ? '#16a34a' : '#dc2626', fontWeight: '700' }}>
-                                      {log.success ? 'ÉXITO' : 'FALLO'}
-                                    </span>
-                                  </td>
-                                  <td style={{ padding: '0.5rem', maxWidth: '300px', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
-                                    {log.error || 'Conexión establecida'}
-                                  </td>
-                                </tr>
-                              ))}
-                            </tbody>
-                          </table>
-                        </div>
-                      </div>
-                    )}
-
-                    <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '1.5rem' }}>
-                      <div className="card" style={{ padding: '1.5rem' }}>
-                        <h4 style={{ fontSize: '1rem', fontWeight: '700', color: '#1e293b', marginBottom: '1.25rem', display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
-                          <CheckCircle size={18} style={{ color: '#4f46e5' }} />
-                          Verificación de Postfix
-                        </h4>
-                        <div style={{ 
-                          background: systemStatus?.details?.postfix_config_ok ? '#f0fdf4' : '#fef2f2', 
-                          border: `1px solid ${systemStatus?.details?.postfix_config_ok ? '#bbf7d0' : '#fecaca'}`,
-                          padding: '1rem',
-                          borderRadius: '0.75rem',
-                          marginBottom: '1rem'
-                        }}>
-                          <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', marginBottom: '0.5rem' }}>
-                            {systemStatus?.details?.postfix_config_ok ? (
-                              <CheckCircle size={16} color="#16a34a" />
-                            ) : (
-                              <AlertCircle size={16} color="#dc2626" />
-                            )}
-                            <span style={{ fontWeight: '700', fontSize: '0.875rem', color: systemStatus?.details?.postfix_config_ok ? '#166534' : '#991b1b' }}>
-                              {systemStatus?.details?.postfix_config_ok ? 'Configuración Correcta' : 'Error en Configuración'}
-                            </span>
-                          </div>
-                          <code style={{ fontSize: '0.75rem', display: 'block', maxHeight: '100px', overflowY: 'auto', whiteSpace: 'pre-wrap', color: systemStatus?.details?.postfix_config_ok ? '#166534' : '#991b1b' }}>
-                            {systemStatus?.details?.postfix_config_ok ? 'Postfix check passed without warnings.' : systemStatus?.details?.postfix_config_error}
-                          </code>
-                        </div>
-                      </div>
-
-                      <div className="card" style={{ padding: '1.5rem' }}>
-                        <h4 style={{ fontSize: '1rem', fontWeight: '700', color: '#1e293b', marginBottom: '1.25rem', display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
-                          <CheckCircle size={18} style={{ color: '#4f46e5' }} />
-                          Verificación de Dovecot
-                        </h4>
-                        <div style={{ 
-                          background: systemStatus?.details?.dovecot_config_ok ? '#f0fdf4' : '#fef2f2', 
-                          border: `1px solid ${systemStatus?.details?.dovecot_config_ok ? '#bbf7d0' : '#fecaca'}`,
-                          padding: '1rem',
-                          borderRadius: '0.75rem',
-                          marginBottom: '1rem'
-                        }}>
-                          <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', marginBottom: '0.5rem' }}>
-                            {systemStatus?.details?.dovecot_config_ok ? (
-                              <CheckCircle size={16} color="#16a34a" />
-                            ) : (
-                              <AlertCircle size={16} color="#dc2626" />
-                            )}
-                            <span style={{ fontWeight: '700', fontSize: '0.875rem', color: systemStatus?.details?.dovecot_config_ok ? '#166534' : '#991b1b' }}>
-                              {systemStatus?.details?.dovecot_config_ok ? 'Configuración Correcta' : 'Error en Configuración'}
-                            </span>
-                          </div>
-                          <code style={{ fontSize: '0.75rem', display: 'block', maxHeight: '100px', overflowY: 'auto', whiteSpace: 'pre-wrap', color: systemStatus?.details?.dovecot_config_ok ? '#166534' : '#991b1b' }}>
-                            {systemStatus?.details?.dovecot_config_ok ? 'Dovecot config check passed.' : systemStatus?.details?.dovecot_config_error}
-                          </code>
-                        </div>
-                      </div>
-
-                      <div className="card" style={{ padding: '1.5rem', gridColumn: 'span 2' }}>
-                        <h4 style={{ fontSize: '1rem', fontWeight: '700', color: '#1e293b', marginBottom: '1.25rem', display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
-                          <Activity size={18} style={{ color: '#4f46e5' }} />
-                          Información Técnica
-                        </h4>
-                        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(240px, 1fr))', gap: '1.5rem' }}>
-                          <div style={{ display: 'flex', flexDirection: 'column', gap: '0.75rem' }}>
-                            <div style={{ fontSize: '0.813rem' }}>
-                              <div style={{ color: '#64748b', marginBottom: '0.25rem' }}>Sistema Operativo</div>
-                              <div style={{ fontWeight: '600', color: '#1e293b' }}>{systemStatus?.details?.os} {systemStatus?.details?.release}</div>
-                            </div>
-                            <div style={{ fontSize: '0.813rem' }}>
-                              <div style={{ color: '#64748b', marginBottom: '0.25rem' }}>Versión de Kernel</div>
-                              <div style={{ fontWeight: '600', color: '#1e293b', fontSize: '0.75rem' }}>{systemStatus?.details?.version}</div>
-                            </div>
-                            <div style={{ fontSize: '0.813rem' }}>
-                              <div style={{ color: '#64748b', marginBottom: '0.25rem' }}>Uptime</div>
-                              <div style={{ fontWeight: '600', color: '#1e293b' }}>{systemStatus?.details?.uptime || 'N/A'}</div>
-                            </div>
-                          </div>
-                          <div style={{ display: 'flex', flexDirection: 'column', gap: '0.75rem' }}>
-                            <div style={{ fontSize: '0.813rem' }}>
-                              <div style={{ color: '#64748b', marginBottom: '0.25rem' }}>Python Version</div>
-                              <div style={{ fontWeight: '600', color: '#1e293b' }}>{systemStatus?.details?.python_version}</div>
-                            </div>
-                            <div style={{ fontSize: '0.813rem' }}>
-                              <div style={{ color: '#64748b', marginBottom: '0.25rem' }}>Ruta de Usuarios</div>
-                              <code style={{ fontSize: '0.7rem', color: '#475569', background: '#f8fafc', padding: '2px 4px', borderRadius: '4px' }}>{systemStatus?.details?.users_file}</code>
-                            </div>
-                            <div style={{ fontSize: '0.813rem' }}>
-                              <div style={{ color: '#64748b', marginBottom: '0.25rem' }}>Base de Correos</div>
-                              <code style={{ fontSize: '0.7rem', color: '#475569', background: '#f8fafc', padding: '2px 4px', borderRadius: '4px' }}>{systemStatus?.details?.mail_base}</code>
-                            </div>
-                          </div>
-                        </div>
-                      </div>
-
-                      <div className="card" style={{ padding: '1.5rem', gridColumn: 'span 2' }}>
-                        <h4 style={{ fontSize: '1rem', fontWeight: '700', color: '#1e293b', marginBottom: '1.25rem', display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
-                          <Database size={18} style={{ color: '#4f46e5' }} />
-                          Estado de Archivos y Permisos
-                        </h4>
-                        <div style={{ overflowX: 'auto' }}>
-                          <table style={{ width: '100%', fontSize: '0.813rem', borderCollapse: 'collapse' }}>
-                            <thead>
-                              <tr style={{ textAlign: 'left', borderBottom: '1px solid #f1f5f9' }}>
-                                <th style={{ padding: '0.5rem', color: '#64748b' }}>ARCHIVO</th>
-                                <th style={{ padding: '0.5rem', color: '#64748b' }}>RUTA</th>
-                                <th style={{ padding: '0.5rem', color: '#64748b' }}>ESTADO</th>
-                                <th style={{ padding: '0.5rem', color: '#64748b' }}>PERMISOS</th>
-                              </tr>
-                            </thead>
-                            <tbody>
-                              {systemStatus?.details?.file_diagnostics && Object.entries(systemStatus.details.file_diagnostics).map(([name, data]: [string, any]) => (
-                                <tr key={name} style={{ borderBottom: '1px solid #f8fafc' }}>
-                                  <td style={{ padding: '0.75rem 0.5rem', fontWeight: '600', color: '#334155' }}>
-                                    {name.replace('_', ' ').toUpperCase()}
-                                  </td>
-                                  <td style={{ padding: '0.75rem 0.5rem' }}>
-                                    <code style={{ fontSize: '0.7rem', color: '#64748b', background: '#f8fafc', padding: '2px 4px', borderRadius: '4px' }}>
-                                      {data.path}
-                                    </code>
-                                  </td>
-                                  <td style={{ padding: '0.75rem 0.5rem' }}>
-                                    <span style={{ 
-                                      display: 'inline-flex', 
-                                      alignItems: 'center', 
-                                      gap: '0.25rem',
-                                      color: data.exists ? '#16a34a' : '#ef4444',
-                                      fontWeight: '600'
-                                    }}>
-                                      {data.exists ? <CheckCircle size={12} /> : <AlertCircle size={12} />}
-                                      {data.status}
-                                    </span>
-                                  </td>
-                                  <td style={{ padding: '0.75rem 0.5rem' }}>
-                                    <span style={{ 
-                                      padding: '0.125rem 0.5rem',
-                                      borderRadius: '9999px',
-                                      fontSize: '0.7rem',
-                                      fontWeight: '600',
-                                      background: data.writable ? '#dcfce7' : '#fee2e2',
-                                      color: data.writable ? '#166534' : '#991b1b'
-                                    }}>
-                                      {data.write_status}
-                                    </span>
-                                  </td>
-                                </tr>
-                              ))}
-                            </tbody>
-                          </table>
-                          {!systemStatus?.details?.file_diagnostics && (
-                            <p style={{ textAlign: 'center', padding: '1rem', color: '#94a3b8' }}>
-                              Cargando diagnósticos de archivos...
-                            </p>
-                          )}
-                        </div>
-
-                        {/* Postfix BCC Configuration Section */}
-                        <div style={{ marginTop: '2rem' }}>
-                          <h4 style={{ fontSize: '0.875rem', fontWeight: '700', color: '#1e293b', marginBottom: '1rem', display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
-                            <Mail size={16} style={{ color: '#6366f1' }} />
-                            Configuración de Copias (BCC) en Postfix
-                          </h4>
-                          <div style={{ background: '#f8fafc', borderRadius: '1rem', padding: '1.25rem', border: '1px solid #e2e8f0' }}>
-                            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '1.5rem' }}>
-                              <div>
-                                <p style={{ fontSize: '0.7rem', color: '#64748b', fontWeight: '700', marginBottom: '0.5rem', textTransform: 'uppercase' }}>Sender BCC Maps</p>
-                                <div style={{ 
-                                  padding: '0.75rem', 
-                                  background: systemStatus?.details?.sender_bcc_config ? '#f1f5f9' : '#fee2e2', 
-                                  borderRadius: '0.5rem',
-                                  fontSize: '0.813rem',
-                                  fontFamily: 'monospace',
-                                  color: systemStatus?.details?.sender_bcc_config ? '#334155' : '#991b1b',
-                                  border: `1px solid ${systemStatus?.details?.sender_bcc_config ? '#e2e8f0' : '#fecdd3'}`
-                                }}>
-                                  {systemStatus?.details?.sender_bcc_config || 'NO CONFIGURADO'}
-                                </div>
-                              </div>
-                              <div>
-                                <p style={{ fontSize: '0.7rem', color: '#64748b', fontWeight: '700', marginBottom: '0.5rem', textTransform: 'uppercase' }}>Recipient BCC Maps</p>
-                                <div style={{ 
-                                  padding: '0.75rem', 
-                                  background: systemStatus?.details?.recipient_bcc_config ? '#f1f5f9' : '#fee2e2', 
-                                  borderRadius: '0.5rem',
-                                  fontSize: '0.813rem',
-                                  fontFamily: 'monospace',
-                                  color: systemStatus?.details?.recipient_bcc_config ? '#334155' : '#991b1b',
-                                  border: `1px solid ${systemStatus?.details?.recipient_bcc_config ? '#e2e8f0' : '#fecdd3'}`
-                                }}>
-                                  {systemStatus?.details?.recipient_bcc_config || 'NO CONFIGURADO'}
-                                </div>
-                              </div>
-                            </div>
-                            
-                            {(!systemStatus?.details?.sender_bcc_config || !systemStatus?.details?.recipient_bcc_config) && systemStatus?.details?.sender_bcc_config !== "Error checking postconf" && (
-                              <div style={{ marginTop: '1rem', padding: '1rem', background: '#fff7ed', borderRadius: '0.75rem', border: '1px solid #ffedd5', display: 'flex', gap: '0.75rem' }}>
-                                <AlertTriangle size={20} style={{ color: '#ea580c', flexShrink: 0 }} />
-                                <div>
-                                  <p style={{ fontSize: '0.813rem', fontWeight: '700', color: '#9a3412', marginBottom: '0.25rem' }}>Acción Requerida: Postfix no está procesando copias</p>
-                                  <p style={{ fontSize: '0.75rem', color: '#c2410c', lineHeight: '1.4' }}>
-                                    Para que las reglas de reenvío funcionen, debes añadir lo siguiente a <code style={{ background: '#ffedd5', padding: '0 2px' }}>/etc/postfix/main.cf</code>:
-                                    <pre style={{ marginTop: '0.5rem', padding: '0.5rem', background: '#fff', borderRadius: '0.25rem', fontSize: '0.7rem', color: '#431407', border: '1px solid #fed7aa', overflowX: 'auto' }}>
-                                      sender_bcc_maps = hash:/etc/postfix/sender_bcc{'\n'}
-                                      recipient_bcc_maps = hash:/etc/postfix/sender_bcc
-                                    </pre>
-                                    Luego reinicia Postfix: <code style={{ background: '#ffedd5', padding: '0 2px' }}>systemctl restart postfix</code>
-                                  </p>
-                                </div>
-                              </div>
-                            )}
-                          </div>
-                        </div>
-
-                        {systemStatus?.details?.file_diagnostics?.aliases_meta?.write_status === 'READ_ONLY' && (
-                          <div style={{ marginTop: '1rem', padding: '0.75rem', background: '#fffbeb', border: '1px solid #fef3c7', borderRadius: '0.5rem', display: 'flex', gap: '0.5rem', alignItems: 'flex-start' }}>
-                            <AlertCircle size={16} style={{ color: '#d97706', marginTop: '0.125rem' }} />
-                            <div>
-                              <p style={{ fontSize: '0.75rem', fontWeight: '600', color: '#92400e', marginBottom: '0.25rem' }}>Problema de Permisos Detectado</p>
-                              <p style={{ fontSize: '0.7rem', color: '#b45309' }}>
-                                El backend no tiene permisos para escribir el archivo de metadatos. Verifica los permisos de la carpeta del proyecto.
-                              </p>
-                            </div>
-                          </div>
-                        )}
-                      </div>
-                    </div>
-                  </motion.div>
-                )}
-
-                {settingsTab === 'users' && (
-                  <motion.div 
-                    key="users"
-                    initial={{ opacity: 0, x: 20 }}
-                    animate={{ opacity: 1, x: 0 }}
-                    exit={{ opacity: 0, x: -20 }}
-                    className="card" 
-                    style={{ padding: '2rem' }}
-                  >
-                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '2rem' }}>
-                      <div>
-                        <h3 style={{ fontSize: '1.25rem', fontWeight: '700', color: '#1e293b', marginBottom: '0.5rem' }}>Usuarios de Acceso</h3>
-                        <p style={{ color: '#64748b', fontSize: '0.875rem' }}>Gestiona las cuentas que tienen acceso a este panel de administración.</p>
-                      </div>
-                      <button onClick={() => setShowAddSystemUserModal(true)} className="btn btn-primary">
-                        <UserPlus size={18} />
-                        Agregar Acceso
-                      </button>
-                    </div>
-
-                    <div style={{ overflowX: 'auto', border: '1px solid #f1f5f9', borderRadius: '1rem' }}>
-                      <table>
-                        <thead>
-                          <tr>
-                            <th>USUARIO</th>
-                            <th>NOMBRE</th>
-                            <th>ESTADO</th>
-                            <th style={{ textAlign: 'right' }}>ACCIONES</th>
-                          </tr>
-                        </thead>
-                        <tbody>
-                          {systemUsers.map((u) => (
-                            <tr key={u.id}>
-                              <td>
-                                <div style={{ display: 'flex', flexDirection: 'column' }}>
-                                  <span style={{ fontWeight: '700', color: '#1e293b' }}>{u.username}</span>
-                                  <span style={{ fontSize: '0.75rem', color: '#94a3b8' }}>{u.email}</span>
-                                </div>
-                              </td>
-                              <td style={{ color: '#475569' }}>{u.full_name}</td>
-                              <td>
-                                {u.is_active ? (
-                                  <span style={{ display: 'inline-flex', alignItems: 'center', gap: '0.375rem', color: '#16a34a', fontWeight: '600', fontSize: '0.813rem' }}>
-                                    <div style={{ width: '6px', height: '6px', borderRadius: '50%', background: '#16a34a' }}></div>
-                                    Activo
-                                  </span>
-                                ) : (
-                                  <span style={{ display: 'inline-flex', alignItems: 'center', gap: '0.375rem', color: '#94a3b8', fontWeight: '600', fontSize: '0.813rem' }}>
-                                    <div style={{ width: '6px', height: '6px', borderRadius: '50%', background: '#94a3b8' }}></div>
-                                    Inactivo
-                                  </span>
-                                )}
-                              </td>
-                               <td style={{ textAlign: 'right' }}>
-                                <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '0.5rem' }}>
-                                  <button 
-                                    onClick={() => {
-                                      setEditingSystemUser(u);
-                                      setEditSystemUserData({
-                                        email: u.email,
-                                        full_name: u.full_name || '',
-                                        password: '',
-                                        is_active: u.is_active
-                                      });
-                                      setShowEditSystemUserModal(true);
-                                    }}
-                                    className="btn-icon"
-                                    style={{ color: '#f59e0b' }}
-                                  >
-                                    <Edit2 size={18} />
-                                  </button>
-                                  <button 
-                                    onClick={() => handleDeleteSystemUser(u.id, u.username)}
-                                    disabled={u.id === user?.id}
-                                    className="btn-icon"
-                                    style={{ color: u.id === user?.id ? '#cbd5e1' : '#ef4444' }}
-                                  >
-                                    <Trash2 size={18} />
-                                  </button>
-                                </div>
-                              </td>
-                            </tr>
-                          ))}
-                        </tbody>
-                      </table>
-                    </div>
-                  </motion.div>
-                )}
-
-                {settingsTab === 'logs' && (
-                  <motion.div 
-                    key="logs"
-                    initial={{ opacity: 0, x: 20 }}
-                    animate={{ opacity: 1, x: 0 }}
-                    exit={{ opacity: 0, x: -20 }}
-                    className="card" 
-                    style={{ padding: '0', overflow: 'hidden' }}
-                  >
-                    <div style={{ padding: '1.5rem 2rem', borderBottom: '1px solid #f1f5f9', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                      <div>
-                        <h3 style={{ fontSize: '1.25rem', fontWeight: '700', color: '#1e293b', marginBottom: '0.25rem' }}>Logs de Auditoría</h3>
-                        <p style={{ color: '#64748b', fontSize: '0.875rem' }}>Registro histórico de acciones realizadas en el sistema.</p>
-                      </div>
-                      <button onClick={fetchAuditLogs} className="btn btn-secondary">
-                        <RefreshCcw size={18} />
-                      </button>
-                    </div>
-                    <div style={{ maxHeight: '500px', overflowY: 'auto' }}>
-                      <table>
-                        <thead style={{ position: 'sticky', top: 0, zIndex: 10, background: '#f8fafc' }}>
-                          <tr>
-                            <th>FECHA</th>
-                            <th>ACCIÓN</th>
-                            <th>RECURSO</th>
-                            <th>DETALLES</th>
-                          </tr>
-                        </thead>
-                        <tbody>
-                          {auditLogs.length === 0 ? (
-                            <tr><td colSpan={4} style={{ textAlign: 'center', padding: '4rem', color: '#94a3b8' }}>No hay registros de auditoría.</td></tr>
-                          ) : auditLogs.map((log) => (
-                            <tr key={log.id}>
-                              <td style={{ whiteSpace: 'nowrap', color: '#64748b', fontSize: '0.75rem' }}>
-                                {new Date(log.created_at).toLocaleString()}
-                              </td>
-                              <td>
-                                <span className="badge badge-primary" style={{ fontSize: '0.7rem' }}>{log.action}</span>
-                              </td>
-                              <td style={{ fontSize: '0.813rem' }}>{log.resource_type || '-'} {log.resource_id}</td>
-                              <td style={{ color: '#475569', fontSize: '0.813rem' }}>{log.details}</td>
-                            </tr>
-                          ))}
-                        </tbody>
-                      </table>
                     </div>
                   </motion.div>
                 )}
@@ -2176,13 +1637,61 @@ const Dashboard: React.FC = () => {
                     </div>
                   </motion.div>
                 )}
+
+                {settingsTab === 'logs' && (
+                  <motion.div 
+                    key="logs"
+                    initial={{ opacity: 0, x: 20 }}
+                    animate={{ opacity: 1, x: 0 }}
+                    exit={{ opacity: 0, x: -20 }}
+                    className="card" 
+                    style={{ padding: '0', overflow: 'hidden' }}
+                  >
+                    <div style={{ padding: '1.5rem 2rem', borderBottom: '1px solid #f1f5f9', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                      <div>
+                        <h3 style={{ fontSize: '1.25rem', fontWeight: '700', color: '#1e293b', marginBottom: '0.25rem' }}>Logs de Auditoría</h3>
+                        <p style={{ color: '#64748b', fontSize: '0.875rem' }}>Registro histórico de acciones realizadas en el sistema.</p>
+                      </div>
+                      <button onClick={fetchAuditLogs} className="btn btn-secondary">
+                        <RefreshCcw size={18} />
+                      </button>
+                    </div>
+                    <div style={{ maxHeight: '500px', overflowY: 'auto' }}>
+                      <table>
+                        <thead style={{ position: 'sticky', top: 0, zIndex: 10, background: '#f8fafc' }}>
+                          <tr>
+                            <th>FECHA</th>
+                            <th>ACCIÓN</th>
+                            <th>RECURSO</th>
+                            <th>DETALLES</th>
+                          </tr>
+                        </thead>
+                        <tbody>
+                          {auditLogs.length === 0 ? (
+                            <tr><td colSpan={4} style={{ textAlign: 'center', padding: '4rem', color: '#94a3b8' }}>No hay registros de auditoría.</td></tr>
+                          ) : auditLogs.map((log: any) => (
+                            <tr key={log.id}>
+                              <td style={{ whiteSpace: 'nowrap', color: '#64748b', fontSize: '0.75rem' }}>
+                                {new Date(log.created_at).toLocaleString()}
+                              </td>
+                              <td>
+                                <span className="badge badge-primary" style={{ fontSize: '0.7rem' }}>{log.action}</span>
+                              </td>
+                              <td style={{ fontSize: '0.813rem' }}>{log.resource_type || '-'} {log.resource_id}</td>
+                              <td style={{ color: '#475569', fontSize: '0.813rem' }}>{log.details}</td>
+                            </tr>
+                          ))}
+                        </tbody>
+                      </table>
+                    </div>
+                  </motion.div>
+                )}
               </AnimatePresence>
             </div>
           </div>
         )}
       </main>
 
-      {/* Notifications */}
       <AnimatePresence>
         {notification && (
           <motion.div 
@@ -2211,7 +1720,6 @@ const Dashboard: React.FC = () => {
         )}
       </AnimatePresence>
 
-      {/* Add User Modal */}
       {showAddModal && (
         <div style={{ 
           position: 'fixed', 
@@ -2349,97 +1857,6 @@ const Dashboard: React.FC = () => {
         </div>
       )}
 
-      {/* Add System User Modal */}
-      {showAddSystemUserModal && (
-        <div style={{ 
-          position: 'fixed', 
-          inset: 0, 
-          background: 'rgba(15, 23, 42, 0.4)', 
-          backdropFilter: 'blur(8px)',
-          display: 'flex', 
-          alignItems: 'center', 
-          justifyContent: 'center',
-          zIndex: 100
-        }}>
-          <motion.div 
-            initial={{ scale: 0.9, opacity: 0, y: 20 }}
-            animate={{ scale: 1, opacity: 1, y: 0 }}
-            className="card" 
-            style={{ width: '100%', maxWidth: '500px', padding: '2.5rem', border: 'none', boxShadow: '0 25px 50px -12px rgba(0, 0, 0, 0.25)' }}
-          >
-            <h2 style={{ fontSize: '1.5rem', fontWeight: '800', marginBottom: '0.5rem', color: '#1e293b' }}>Nuevo Usuario de Acceso</h2>
-            <p style={{ color: '#64748b', fontSize: '0.875rem', marginBottom: '2rem' }}>Crea una nueva cuenta para administrar el sistema.</p>
-            
-            <form onSubmit={handleCreateSystemUser}>
-              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '1rem' }}>
-                <div className="input-group">
-                  <label>Nombre de Usuario</label>
-                  <input 
-                    type="text" 
-                    className="input-control" 
-                    placeholder="admin"
-                    value={newSystemUser.username}
-                    onChange={e => setNewSystemUser({...newSystemUser, username: e.target.value})}
-                    required
-                  />
-                </div>
-                <div className="input-group">
-                  <label>Nombre Completo</label>
-                  <input 
-                    type="text" 
-                    className="input-control" 
-                    placeholder="Juan Pérez"
-                    value={newSystemUser.full_name}
-                    onChange={e => setNewSystemUser({...newSystemUser, full_name: e.target.value})}
-                  />
-                </div>
-              </div>
-
-              <div className="input-group">
-                <label>Correo Electrónico</label>
-                <input 
-                  type="email" 
-                  className="input-control" 
-                  placeholder="juan@ejemplo.com"
-                  value={newSystemUser.email}
-                  onChange={e => setNewSystemUser({...newSystemUser, email: e.target.value})}
-                  required
-                />
-              </div>
-
-              <div className="input-group">
-                <label style={{ display: 'flex', justifyContent: 'space-between' }}>
-                  Contraseña
-                  <button 
-                    type="button" 
-                    onClick={() => handleGeneratePassword('system-new')}
-                    style={{ background: 'none', border: 'none', color: '#4f46e5', fontSize: '0.75rem', cursor: 'pointer', fontWeight: '600' }}
-                  >
-                    Generar segura
-                  </button>
-                </label>
-                <input 
-                  type="password" 
-                  className="input-control" 
-                  placeholder="••••••••"
-                  value={newSystemUser.password}
-                  onChange={e => setNewSystemUser({...newSystemUser, password: e.target.value})}
-                  required
-                />
-              </div>
-
-              
-              <div style={{ display: 'flex', gap: '1rem', justifyContent: 'flex-end' }}>
-                <button type="button" onClick={() => setShowAddSystemUserModal(false)} className="btn btn-secondary">Cancelar</button>
-                <button type="submit" className="btn btn-primary" disabled={actionLoading}>
-                  {actionLoading ? 'Creando...' : 'Crear Usuario'}
-                </button>
-              </div>
-            </form>
-          </motion.div>
-        </div>
-      )}
-      {/* View User Modal */}
       {showViewModal && selectedMailUser && (
         <div style={{ 
           position: 'fixed', 
