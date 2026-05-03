@@ -22,7 +22,7 @@ from database import engine, get_db, check_db_connection
 # Create database tables
 models.Base.metadata.create_all(bind=engine)
 
-app = FastAPI(title="soop MAIL API")
+app = FastAPI(title="sarsoop labs API")
 
 @app.on_event("startup")
 def startup_tasks():
@@ -122,24 +122,25 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-# Configuration from environment
-USERS_FILE = os.environ.get('SOOP_MAIL_USERS_FILE', os.environ.get('USERS_FILE', '/etc/soop-mail/users'))
-print(f"DEBUG: USERS_FILE path: {USERS_FILE} (exists: {os.path.exists(USERS_FILE)})")
 # Move metadata file to local directory instead of /etc/
 BASE_DIR = os.path.dirname(os.path.abspath(__file__))
+
+# Configuration from environment
+USERS_FILE = os.environ.get('SOOP_MAIL_USERS_FILE', os.environ.get('USERS_FILE', os.path.join(BASE_DIR, 'users')))
+print(f"DEBUG: USERS_FILE path: {USERS_FILE} (exists: {os.path.exists(USERS_FILE)})")
 ALIAS_META_FILE = os.environ.get('ALIAS_META_FILE', os.path.join(BASE_DIR, 'aliases_meta.json'))
 
-SENDER_BCC_FILE = os.environ.get('SENDER_BCC_FILE', '/etc/postfix/sender_bcc')
-RECIPIENT_BCC_FILE = os.environ.get('RECIPIENT_BCC_FILE', '/etc/postfix/recipient_bcc')
-VIRTUAL_MAP = os.environ.get('POSTFIX_VIRTUAL', '/etc/postfix/virtual')
-VMAILBOX_MAP = os.environ.get('POSTFIX_VMAILBOX', '/etc/postfix/vmailbox')
+SENDER_BCC_FILE = os.environ.get('SENDER_BCC_FILE', os.path.join(BASE_DIR, 'sender_bcc'))
+RECIPIENT_BCC_FILE = os.environ.get('RECIPIENT_BCC_FILE', os.path.join(BASE_DIR, 'recipient_bcc'))
+VIRTUAL_MAP = os.environ.get('POSTFIX_VIRTUAL', os.path.join(BASE_DIR, 'virtual'))
+VMAILBOX_MAP = os.environ.get('POSTFIX_VMAILBOX', os.path.join(BASE_DIR, 'vmailbox'))
 
 # Backward compatibility aliases
 POSTFIX_VIRTUAL = VIRTUAL_MAP
 POSTFIX_VMAILBOX = VMAILBOX_MAP
 
-POSTFIX_SENDER_RESTRICTIONS = os.environ.get('POSTFIX_SENDER_RESTRICTIONS', '/etc/postfix/sender_restrictions')
-MAIL_BASE = os.environ.get('SOOP_MAIL_BASE', os.environ.get('MAIL_BASE', '/var/mail/vhosts'))
+POSTFIX_SENDER_RESTRICTIONS = os.environ.get('POSTFIX_SENDER_RESTRICTIONS', os.path.join(BASE_DIR, 'sender_restrictions'))
+MAIL_BASE = os.environ.get('SOOP_MAIL_BASE', os.environ.get('MAIL_BASE', os.path.join(BASE_DIR, 'vhosts')))
 print(f"DEBUG: MAIL_BASE path: {MAIL_BASE} (exists: {os.path.exists(MAIL_BASE)})")
 VMAIL_UID = int(os.getenv("SOOP_MAIL_VMAIL_UID", 5000))
 VMAIL_GID = int(os.getenv("SOOP_MAIL_VMAIL_GID", 5000))
@@ -653,36 +654,6 @@ async def login(request: Request, db: Session = Depends(get_db)):
     log_audit(db, user.id, "LOGIN", details=f"User {user.username} logged in", request=request)
     
     return {"access_token": access_token, "token_type": "bearer"}
-
-@app.post("/api/auth/register", response_model=schemas.UserOut)
-async def register_user(
-    user_data: schemas.UserRegister,
-    request: Request,
-    db: Session = Depends(get_db)
-):
-    # Check if username or email already exists
-    if db.query(models.User).filter(models.User.username == user_data.username).first():
-        raise HTTPException(status_code=400, detail="El nombre de usuario ya está registrado")
-    if db.query(models.User).filter(models.User.email == user_data.email).first():
-        raise HTTPException(status_code=400, detail="El correo electrónico ya está registrado")
-    
-    # First user registered is always admin
-    is_first_user = db.query(models.User).count() == 0
-    
-    new_user = models.User(
-        username=user_data.username,
-        email=user_data.email,
-        full_name=user_data.full_name,
-        is_active=True,
-        password_hash=auth.get_password_hash(user_data.password)
-    )
-    db.add(new_user)
-    db.commit()
-    db.refresh(new_user)
-    
-    log_audit(db, new_user.id, "REGISTER", "User", str(new_user.id), f"Usuario registrado: {new_user.username}", request=request)
-    
-    return new_user
 
 @app.get("/api/auth/me", response_model=schemas.UserOut)
 async def read_users_me(current_user: models.User = Depends(auth.get_current_active_user)):

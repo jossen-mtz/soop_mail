@@ -710,7 +710,7 @@ const Dashboard: React.FC = () => {
           }}>
             <Mail color="white" size={22} />
           </div>
-          <h2 style={{ fontSize: '1.25rem', fontWeight: '800', color: '#1e293b', letterSpacing: '-0.025em' }}>soop MAIL</h2>
+          <h2 style={{ fontSize: '1.25rem', fontWeight: '800', color: '#1e293b', letterSpacing: '-0.025em' }}>sarsoop labs</h2>
         </div>
 
         <nav style={{ flex: 1 }}>
@@ -1066,82 +1066,78 @@ const Dashboard: React.FC = () => {
               >
                 Copias (BCC)
               </button>
-              {user?.is_admin && (
-                <>
-                  <button 
-                    onClick={() => setSettingsTab('users')}
-                    style={{ 
-                      padding: '1rem 1.5rem', 
-                      borderBottom: settingsTab === 'users' ? '2px solid #4f46e5' : '2px solid transparent',
-                      color: settingsTab === 'users' ? '#4f46e5' : '#64748b',
-                      fontWeight: '600',
-                      fontSize: '0.875rem',
-                      background: 'none',
-                      borderTop: 'none',
-                      borderLeft: 'none',
-                      borderRight: 'none',
-                      cursor: 'pointer',
-                      whiteSpace: 'nowrap'
-                    }}
-                  >
-                    Accesos
-                  </button>
-                  <button 
-                    onClick={() => setSettingsTab('logs')}
-                    style={{ 
-                      padding: '1rem 1.5rem', 
-                      borderBottom: settingsTab === 'logs' ? '2px solid #4f46e5' : '2px solid transparent',
-                      color: settingsTab === 'logs' ? '#4f46e5' : '#64748b',
-                      fontWeight: '600',
-                      fontSize: '0.875rem',
-                      background: 'none',
-                      borderTop: 'none',
-                      borderLeft: 'none',
-                      borderRight: 'none',
-                      cursor: 'pointer',
-                      whiteSpace: 'nowrap'
-                    }}
-                  >
-                    Auditoría
-                  </button>
-                  <button 
-                    onClick={() => setSettingsTab('mail-logs')}
-                    style={{ 
-                      padding: '1rem 1.5rem', 
-                      borderBottom: settingsTab === 'mail-logs' ? '2px solid #4f46e5' : '2px solid transparent',
-                      color: settingsTab === 'mail-logs' ? '#4f46e5' : '#64748b',
-                      fontWeight: '600',
-                      fontSize: '0.875rem',
-                      background: 'none',
-                      borderTop: 'none',
-                      borderLeft: 'none',
-                      borderRight: 'none',
-                      cursor: 'pointer',
-                      whiteSpace: 'nowrap'
-                    }}
-                  >
-                    Logs Mail
-                  </button>
-                  <button 
-                    onClick={() => setSettingsTab('auth-console')}
-                    style={{ 
-                      padding: '1rem 1.5rem', 
-                      borderBottom: settingsTab === 'auth-console' ? '2px solid #4f46e5' : '2px solid transparent',
-                      color: settingsTab === 'auth-console' ? '#4f46e5' : '#64748b',
-                      fontWeight: '600',
-                      fontSize: '0.875rem',
-                      background: 'none',
-                      borderTop: 'none',
-                      borderLeft: 'none',
-                      borderRight: 'none',
-                      cursor: 'pointer',
-                      whiteSpace: 'nowrap'
-                    }}
-                  >
-                    Consola Auth
-                  </button>
-                </>
-              )}
+              <button 
+                onClick={() => setSettingsTab('users')}
+                style={{ 
+                  padding: '1rem 1.5rem', 
+                  borderBottom: settingsTab === 'users' ? '2px solid #4f46e5' : '2px solid transparent',
+                  color: settingsTab === 'users' ? '#4f46e5' : '#64748b',
+                  fontWeight: '600',
+                  fontSize: '0.875rem',
+                  background: 'none',
+                  borderTop: 'none',
+                  borderLeft: 'none',
+                  borderRight: 'none',
+                  cursor: 'pointer',
+                  whiteSpace: 'nowrap'
+                }}
+              >
+                Accesos
+              </button>
+              <button 
+                onClick={() => setSettingsTab('logs')}
+                style={{ 
+                  padding: '1rem 1.5rem', 
+                  borderBottom: settingsTab === 'logs' ? '2px solid #4f46e5' : '2px solid transparent',
+                  color: settingsTab === 'logs' ? '#4f46e5' : '#64748b',
+                  fontWeight: '600',
+                  fontSize: '0.875rem',
+                  background: 'none',
+                  borderTop: 'none',
+                  borderLeft: 'none',
+                  borderRight: 'none',
+                  cursor: 'pointer',
+                  whiteSpace: 'nowrap'
+                }}
+              >
+                Auditoría
+              </button>
+              <button 
+                onClick={() => setSettingsTab('mail-logs')}
+                style={{ 
+                  padding: '1rem 1.5rem', 
+                  borderBottom: settingsTab === 'mail-logs' ? '2px solid #4f46e5' : '2px solid transparent',
+                  color: settingsTab === 'mail-logs' ? '#4f46e5' : '#64748b',
+                  fontWeight: '600',
+                  fontSize: '0.875rem',
+                  background: 'none',
+                  borderTop: 'none',
+                  borderLeft: 'none',
+                  borderRight: 'none',
+                  cursor: 'pointer',
+                  whiteSpace: 'nowrap'
+                }}
+              >
+                Logs Mail
+              </button>
+              <button 
+                onClick={() => setSettingsTab('auth-console')}
+                style={{ 
+                  padding: '1rem 1.5rem', 
+                  borderBottom: settingsTab === 'auth-console' ? '2px solid #4f46e5' : '2px solid transparent',
+                  color: settingsTab === 'auth-console' ? '#4f46e5' : '#64748b',
+                  fontWeight: '600',
+                  fontSize: '0.875rem',
+                  background: 'none',
+                  borderTop: 'none',
+                  borderLeft: 'none',
+                  borderRight: 'none',
+                  cursor: 'pointer',
+                  whiteSpace: 'nowrap'
+                }}
+              >
+                Consola Auth
+              </button>
             </div>
 
             <div style={{ width: '100%' }}>

@@ -71,7 +71,7 @@ const LoginPage: React.FC = () => {
           }}>
             <ShieldCheck size={36} />
           </div>
-          <h1 style={{ fontSize: '2rem', fontWeight: '800', marginBottom: '0.5rem', color: '#1e293b' }}>soop MAIL</h1>
+          <h1 style={{ fontSize: '2rem', fontWeight: '800', marginBottom: '0.5rem', color: '#1e293b' }}>sarsoop labs</h1>
           <p style={{ color: '#64748b', fontSize: '0.925rem' }}>Gestión de Correo Empresarial</p>
         </div>
 
@@ -173,23 +173,6 @@ const LoginPage: React.FC = () => {
         </form>
 
         <div style={{ marginTop: '2.5rem', textAlign: 'center' }}>
-          <p style={{ color: '#64748b', fontSize: '0.875rem', marginBottom: '1.5rem' }}>
-            ¿No tienes una cuenta?{' '}
-            <button 
-              onClick={() => navigate('/register')}
-              style={{ 
-                background: 'none', 
-                border: 'none', 
-                color: '#4f46e5', 
-                fontWeight: '700', 
-                cursor: 'pointer',
-                padding: 0,
-                fontSize: '0.875rem'
-              }}
-            >
-              Registrate aquí
-            </button>
-          </p>
           <div style={{ fontSize: '0.813rem', color: '#94a3b8' }}>
             &copy; 2026 soop Group. Todos los derechos reservados.
           </div>
