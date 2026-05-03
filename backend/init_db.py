@@ -22,8 +22,7 @@ def init_db():
             email=admin_email,
             password_hash=hashed_password,
             full_name="Administrator",
-            is_active=True,
-            is_admin=True
+            is_active=True
         )
         db.add(admin_user)
         db.commit()

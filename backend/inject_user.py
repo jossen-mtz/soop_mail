@@ -23,7 +23,6 @@ def inject_admin():
     if user:
         print(f"Updating existing user: {username}")
         user.password_hash = hashed_password
-        user.is_admin = True
         user.is_active = True
     else:
         print(f"Creating new admin user: {username}")
@@ -32,8 +31,7 @@ def inject_admin():
             email=email,
             password_hash=hashed_password,
             full_name="Administrator",
-            is_active=True,
-            is_admin=True
+            is_active=True
         )
         db.add(user)
     

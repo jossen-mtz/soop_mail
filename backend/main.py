@@ -1381,21 +1381,25 @@ def get_mail_logs(lines: int = 100, current_user: models.User = Depends(auth.get
         return {"logs": ["No se encontró el archivo de logs de correo en el sistema."]}
         
     try:
-        # Usar tail para eficiencia
-        result = subprocess.run(['tail', '-n', str(lines), target_log], capture_output=True, text=True)
-        if result.returncode == 0:
-            return {"logs": result.stdout.splitlines(), "path": target_log}
-        else:
-            return {"logs": [f"Error al leer logs: {result.stderr}"]}
+        # Intenta usar tail, si falla (como en Windows), usa Python puro
+        try:
+            result = subprocess.run(['tail', '-n', str(lines), target_log], capture_output=True, text=True)
+            if result.returncode == 0:
+                return {"logs": result.stdout.splitlines(), "path": target_log}
+        except FileNotFoundError:
+            # Fallback para Windows o sistemas sin tail
+            with open(target_log, 'r', encoding='utf-8', errors='replace') as f:
+                # Leer las últimas N líneas de forma ineficiente pero segura para archivos pequeños/medianos
+                all_lines = f.readlines()
+                return {"logs": [line.strip() for line in all_lines[-lines:]], "path": target_log}
+
+        return {"logs": ["Error al leer logs: Tail no devolvió nada"]}
     except Exception as e:
         return {"logs": [f"Error de sistema: {str(e)}"]}
 
 @app.get("/api/system/logs/mail/auth")
 def get_auth_logs(lines: int = 100, email: Optional[str] = None, current_user: models.User = Depends(auth.get_current_active_user)):
-    # Restricción: Si no es admin, DEBE proporcionar un email para filtrar
-    if not current_user.is_admin and not email:
-        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Not enough permissions")
-        
+    # Todos los usuarios son admins ahora
     log_paths = ['/var/log/mail.log', '/var/log/mail.err', '/var/log/mail.info']
     target_log = None
     for path in log_paths:
@@ -1410,20 +1414,27 @@ def get_auth_logs(lines: int = 100, email: Optional[str] = None, current_user: m
         # Markers for authentication
         auth_patterns = ["Login:", "sasl_username=", "password verification failed", "authentication failed", "auth-worker", "passdb"]
         
-        # Read the last N lines and filter
-        result = subprocess.run(['tail', '-n', '2000', target_log], capture_output=True, text=True)
-        if result.returncode != 0:
+        all_lines = []
+        try:
+            # Intentar usar tail para las últimas 2000 líneas
+            result = subprocess.run(['tail', '-n', '2000', target_log], capture_output=True, text=True)
+            if result.returncode == 0:
+                all_lines = result.stdout.splitlines()
+        except FileNotFoundError:
+            # Fallback para Windows
+            with open(target_log, 'r', encoding='utf-8', errors='replace') as f:
+                all_lines = f.readlines()
+        
+        if not all_lines:
             return {"logs": []}
             
-        all_lines = result.stdout.splitlines()
         auth_lines = []
-        
         for line in all_lines:
+            line = line.strip()
             if any(p in line for p in auth_patterns):
                 if not email or email in line:
                     auth_lines.append(line)
                     
-        # Return only requested number of lines (latest)
         return {"logs": auth_lines[-lines:]}
     except Exception as e:
         return {"logs": [f"Error: {str(e)}"]}
@@ -1444,13 +1455,14 @@ async def stream_auth_logs(email: Optional[str] = None, current_user: models.Use
 
         auth_patterns = ["Login:", "sasl_username=", "password verification failed", "authentication failed", "auth-worker", "passdb"]
         
-        process = await asyncio.create_subprocess_exec(
-            'tail', '-f', '-n', '100', target_log,
-            stdout=asyncio.subprocess.PIPE,
-            stderr=asyncio.subprocess.PIPE
-        )
-        
+        process = None
         try:
+            process = await asyncio.create_subprocess_exec(
+                'tail', '-f', '-n', '100', target_log,
+                stdout=asyncio.subprocess.PIPE,
+                stderr=asyncio.subprocess.PIPE
+            )
+            
             while True:
                 line = await process.stdout.readline()
                 if not line:
@@ -1459,14 +1471,30 @@ async def stream_auth_logs(email: Optional[str] = None, current_user: models.Use
                 if any(p in decoded_line for p in auth_patterns):
                     if not email or email in decoded_line:
                         yield f"data: {decoded_line}\n\n"
+        except FileNotFoundError:
+            # Fallback para Windows: Polling básico (no recomendado para prod, pero útil para dev)
+            last_size = os.path.getsize(target_log)
+            while True:
+                current_size = os.path.getsize(target_log)
+                if current_size > last_size:
+                    with open(target_log, 'r', encoding='utf-8', errors='replace') as f:
+                        f.seek(last_size)
+                        new_content = f.read()
+                        for line in new_content.splitlines():
+                            if any(p in line for p in auth_patterns):
+                                if not email or email in line:
+                                    yield f"data: {line}\n\n"
+                    last_size = current_size
+                await asyncio.sleep(1)
         except asyncio.CancelledError:
-            process.terminate()
-            await process.wait()
+            if process:
+                process.terminate()
+                await process.wait()
             raise
         except Exception as e:
             yield f"data: Error: {str(e)}\n\n"
         finally:
-            if process.returncode is None:
+            if process and process.returncode is None:
                 process.terminate()
                 await process.wait()
 
