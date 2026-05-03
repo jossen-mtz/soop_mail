@@ -8,7 +8,6 @@ class UserBase(BaseModel):
     email: EmailStr
     full_name: Optional[str] = None
     is_active: bool = True
-    is_admin: bool = False
 
     @field_validator("username")
     @classmethod
@@ -44,7 +43,6 @@ class UserUpdate(BaseModel):
     full_name: Optional[str] = None
     password: Optional[str] = None
     is_active: Optional[bool] = None
-    is_admin: Optional[bool] = None
 
     @field_validator("password")
     @classmethod
@@ -98,6 +96,12 @@ class ForwardingRule(BaseModel):
     target: str
     direction: str = "both" # incoming, outgoing, both
     active: bool = True
+
+class SoopMailForward(BaseModel):
+    source: str
+    destinations: List[str]
+    keep_local: bool = True
+    description: Optional[str] = None
 
 class MailingList(BaseModel):
     email: str

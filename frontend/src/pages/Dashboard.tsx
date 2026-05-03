@@ -44,7 +44,11 @@ const Dashboard: React.FC = () => {
   const [mailUsers, setMailUsers] = useState<MailUser[]>([]);
   const [systemUsers, setSystemUsers] = useState<any[]>([]);
   const [aliases, setAliases] = useState<any[]>([]);
-  const [forwardingRules, setForwardingRules] = useState<any[]>([]);
+  const [bccRules, setBccRules] = useState<{sender: any[], recipient: any[]}>({ sender: [], recipient: [] });
+  const [forwards, setForwards] = useState<any[]>([]);
+  const [newForward, setNewForward] = useState({ source: '', destinations: '', keep_local: true, description: '' });
+  const [showAddForwardModal, setShowAddForwardModal] = useState(false);
+  const [bccMode, setBccMode] = useState<'sender' | 'recipient'>('sender');
   const [auditLogs, setAuditLogs] = useState<any[]>([]);
   const [systemStatus, setSystemStatus] = useState<any>(null);
   const [loading, setLoading] = useState(true);
@@ -104,7 +108,6 @@ const Dashboard: React.FC = () => {
     email: '',
     full_name: '',
     password: '',
-    is_admin: false,
     is_active: true
   });
   const [showPassword, setShowPassword] = useState(false);
@@ -123,7 +126,6 @@ const Dashboard: React.FC = () => {
     email: '',
     full_name: '',
     password: '',
-    is_admin: false,
     is_active: true
   });
 
@@ -132,7 +134,7 @@ const Dashboard: React.FC = () => {
     full_name: user?.full_name || ''
   });
   
-  const [settingsTab, setSettingsTab] = useState<'profile' | 'server' | 'users' | 'logs' | 'mail-logs' | 'aliases' | 'forwarding' | 'auth-console'>('profile');
+  const [settingsTab, setSettingsTab] = useState<'profile' | 'server' | 'users' | 'logs' | 'mail-logs' | 'aliases' | 'forwards' | 'bcc' | 'auth-console'>('profile');
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
   const [authConsoleLogs, setAuthConsoleLogs] = useState<string[]>([]);
   const [isStreamingAuth, setIsStreamingAuth] = useState(false);
@@ -200,13 +202,23 @@ const Dashboard: React.FC = () => {
     }
   };
 
-  const fetchForwardingRules = async () => {
+  const fetchBCCRules = async () => {
     try {
-      const response = await api.get('/api/mail/forwarding');
-      setForwardingRules(response.data);
+      const response = await api.get('/api/mail/bcc');
+      setBccRules(response.data);
     } catch (err) {
-      console.error('Error fetching forwarding rules:', err);
-      showNotification('Error al cargar reglas de reenvío', 'error');
+      console.error('Error fetching BCC rules:', err);
+      showNotification('Error al cargar reglas BCC', 'error');
+    }
+  };
+
+  const fetchForwards = async () => {
+    try {
+      const response = await api.get('/api/mail/forwards');
+      setForwards(response.data);
+    } catch (err) {
+      console.error('Error fetching forwards:', err);
+      showNotification('Error al cargar reenvíos', 'error');
     }
   };
 
@@ -244,15 +256,15 @@ const Dashboard: React.FC = () => {
   };
 
 
-  const handleCreateForwardingRule = async (e: React.FormEvent) => {
+  const handleCreateBCCRule = async (e: React.FormEvent) => {
     e.preventDefault();
     setActionLoading(true);
     try {
-      await api.post('/api/mail/forwarding', newForwarding);
-      showNotification('Regla de reenvío creada', 'success');
+      await api.post(`/api/mail/bcc/${bccMode}`, newForwarding);
+      showNotification('Regla BCC creada', 'success');
       setShowAddForwardingModal(false);
       setNewForwarding({ email: '', target: '' });
-      fetchForwardingRules();
+      fetchBCCRules();
     } catch (err: any) {
       showNotification(formatError(err.response?.data?.detail) || 'Error al crear regla', 'error');
     } finally {
@@ -260,18 +272,61 @@ const Dashboard: React.FC = () => {
     }
   };
 
-  const handleDeleteForwardingRule = (email: string) => {
+  const handleDeleteBCCRule = (email: string, mode: 'sender' | 'recipient') => {
     setDeleteConfig({
-      title: 'Eliminar Regla de Reenvío',
+      title: 'Eliminar Regla BCC',
+      message: `¿Estás seguro de eliminar la copia (BCC) de ${email}?`,
+      onConfirm: async () => {
+        setActionLoading(true);
+        try {
+          await api.delete(`/api/mail/bcc/${mode}/${email}`);
+          showNotification('Regla eliminada', 'success');
+          fetchBCCRules();
+        } catch (err) {
+          showNotification('Error al eliminar regla', 'error');
+        } finally {
+          setActionLoading(false);
+          setShowDeleteConfirm(false);
+        }
+      }
+    });
+    setShowDeleteConfirm(true);
+  };
+
+  const handleCreateForward = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setActionLoading(true);
+    try {
+      const payload = {
+        source: newForward.source,
+        destinations: newForward.destinations.split(',').map(d => d.trim()).filter(d => d),
+        keep_local: newForward.keep_local,
+        description: newForward.description
+      };
+      await api.post('/api/mail/forwards', payload);
+      showNotification('Reenvío creado con éxito', 'success');
+      setShowAddForwardModal(false);
+      setNewForward({ source: '', destinations: '', keep_local: true, description: '' });
+      fetchForwards();
+    } catch (err: any) {
+      showNotification(formatError(err.response?.data?.detail) || 'Error al crear reenvío', 'error');
+    } finally {
+      setActionLoading(false);
+    }
+  };
+
+  const handleDeleteForward = (email: string) => {
+    setDeleteConfig({
+      title: 'Eliminar Reenvío',
       message: `¿Estás seguro de eliminar el reenvío de ${email}?`,
       onConfirm: async () => {
         setActionLoading(true);
         try {
-          await api.delete(`/api/mail/forwarding/${email}`);
-          showNotification('Regla eliminada', 'success');
-          fetchForwardingRules();
+          await api.delete(`/api/mail/forwards/${email}`);
+          showNotification('Reenvío eliminado', 'success');
+          fetchForwards();
         } catch (err) {
-          showNotification('Error al eliminar regla', 'error');
+          showNotification('Error al eliminar reenvío', 'error');
         } finally {
           setActionLoading(false);
           setShowDeleteConfirm(false);
@@ -395,16 +450,17 @@ const Dashboard: React.FC = () => {
     if (activeTab === 'settings') {
       if (settingsTab === 'logs') fetchAuditLogs();
       if (settingsTab === 'server') fetchSystemStatus();
-      if (settingsTab === 'users' && user?.is_admin) fetchSystemUsers();
+      if (settingsTab === 'users') fetchSystemUsers();
       if (settingsTab === 'mail-logs') fetchMailLogs();
       if (settingsTab === 'aliases') fetchMailAliases();
-      if (settingsTab === 'forwarding') fetchForwardingRules();
+      if (settingsTab === 'forwards') fetchForwards();
+      if (settingsTab === 'bcc') fetchBCCRules();
     }
   }, [activeTab, settingsTab]);
 
   useEffect(() => {
     fetchMailUsers();
-    if (user?.is_admin) {
+    if (user) {
       fetchSystemUsers();
       fetchAuditLogs();
     }
@@ -538,7 +594,6 @@ const Dashboard: React.FC = () => {
         email: '',
         full_name: '',
         password: '',
-        is_admin: false,
         is_active: true
       });
       fetchSystemUsers();
@@ -721,7 +776,7 @@ const Dashboard: React.FC = () => {
             </div>
             <div style={{ overflow: 'hidden' }}>
               <div style={{ fontSize: '0.875rem', fontWeight: '700', color: '#1e293b', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{user?.full_name}</div>
-              <div style={{ fontSize: '0.75rem', color: '#64748b' }}>{user?.is_admin ? 'Administrador' : 'Editor'}</div>
+              <div style={{ fontSize: '0.75rem', color: '#64748b' }}>Administrador</div>
             </div>
           </div>
           <button onClick={logout} className="btn btn-secondary" style={{ width: '100%', justifyContent: 'flex-start', background: '#fef2f2', color: '#dc2626', borderColor: '#fee2e2' }}>
@@ -976,11 +1031,11 @@ const Dashboard: React.FC = () => {
                 Alias y Listas
               </button>
               <button 
-                onClick={() => setSettingsTab('forwarding')}
+                onClick={() => setSettingsTab('forwards')}
                 style={{ 
                   padding: '1rem 1.5rem', 
-                  borderBottom: settingsTab === 'forwarding' ? '2px solid #4f46e5' : '2px solid transparent',
-                  color: settingsTab === 'forwarding' ? '#4f46e5' : '#64748b',
+                  borderBottom: settingsTab === 'forwards' ? '2px solid #4f46e5' : '2px solid transparent',
+                  color: settingsTab === 'forwards' ? '#4f46e5' : '#64748b',
                   fontWeight: '600',
                   fontSize: '0.875rem',
                   background: 'none',
@@ -991,7 +1046,25 @@ const Dashboard: React.FC = () => {
                   whiteSpace: 'nowrap'
                 }}
               >
-                Reenvíos (BCC)
+                Reenvíos
+              </button>
+              <button 
+                onClick={() => setSettingsTab('bcc')}
+                style={{ 
+                  padding: '1rem 1.5rem', 
+                  borderBottom: settingsTab === 'bcc' ? '2px solid #4f46e5' : '2px solid transparent',
+                  color: settingsTab === 'bcc' ? '#4f46e5' : '#64748b',
+                  fontWeight: '600',
+                  fontSize: '0.875rem',
+                  background: 'none',
+                  borderTop: 'none',
+                  borderLeft: 'none',
+                  borderRight: 'none',
+                  cursor: 'pointer',
+                  whiteSpace: 'nowrap'
+                }}
+              >
+                Copias (BCC)
               </button>
               {user?.is_admin && (
                 <>
@@ -1619,7 +1692,7 @@ const Dashboard: React.FC = () => {
                   </motion.div>
                 )}
 
-                {settingsTab === 'users' && user?.is_admin && (
+                {settingsTab === 'users' && (
                   <motion.div 
                     key="users"
                     initial={{ opacity: 0, x: 20 }}
@@ -1645,7 +1718,6 @@ const Dashboard: React.FC = () => {
                           <tr>
                             <th>USUARIO</th>
                             <th>NOMBRE</th>
-                            <th>ROL</th>
                             <th>ESTADO</th>
                             <th style={{ textAlign: 'right' }}>ACCIONES</th>
                           </tr>
@@ -1660,13 +1732,6 @@ const Dashboard: React.FC = () => {
                                 </div>
                               </td>
                               <td style={{ color: '#475569' }}>{u.full_name}</td>
-                              <td>
-                                {u.is_admin ? (
-                                  <span className="badge badge-primary" style={{ background: '#eef2ff', color: '#4f46e5', border: '1px solid #e0e7ff' }}>Admin</span>
-                                ) : (
-                                  <span className="badge badge-secondary">Editor</span>
-                                )}
-                              </td>
                               <td>
                                 {u.is_active ? (
                                   <span style={{ display: 'inline-flex', alignItems: 'center', gap: '0.375rem', color: '#16a34a', fontWeight: '600', fontSize: '0.813rem' }}>
@@ -1689,7 +1754,6 @@ const Dashboard: React.FC = () => {
                                         email: u.email,
                                         full_name: u.full_name || '',
                                         password: '',
-                                        is_admin: u.is_admin,
                                         is_active: u.is_active
                                       });
                                       setShowEditSystemUserModal(true);
@@ -1903,9 +1967,9 @@ const Dashboard: React.FC = () => {
                   </motion.div>
                 )}
 
-                {settingsTab === 'forwarding' && (
+                 {settingsTab === 'forwards' && (
                   <motion.div 
-                    key="forwarding"
+                    key="forwards"
                     initial={{ opacity: 0, x: 20 }}
                     animate={{ opacity: 1, x: 0 }}
                     exit={{ opacity: 0, x: -20 }}
@@ -1915,25 +1979,114 @@ const Dashboard: React.FC = () => {
                     <div>
                       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1.5rem' }}>
                         <div>
-                          <h3 style={{ fontSize: '1rem', fontWeight: '700', color: '#1e293b' }}>Reglas de Reenvío (BCC)</h3>
-                          <p style={{ fontSize: '0.813rem', color: '#64748b' }}>Copia oculta de correos salientes para supervisión.</p>
+                          <h3 style={{ fontSize: '1rem', fontWeight: '700', color: '#1e293b' }}>Reenvíos</h3>
+                          <p style={{ fontSize: '0.813rem', color: '#64748b' }}>Redirección de correos a destinos externos.</p>
                         </div>
-                        <button className="btn btn-primary" onClick={() => setShowAddForwardingModal(true)}>
+                        <button className="btn btn-primary" onClick={() => setShowAddForwardModal(true)}>
                           <Plus size={16} />
-                          Nueva Regla
+                          Nuevo Reenvío
                         </button>
                       </div>
                       <div className="table-container">
                         <table className="table">
                           <thead>
                             <tr>
-                              <th>Emisor</th>
+                              <th>Dirección Origen</th>
+                              <th>Destinos</th>
+                              <th>Copia Local</th>
+                              <th style={{ textAlign: 'right' }}>Acciones</th>
+                            </tr>
+                          </thead>
+                          <tbody>
+                            {forwards.map((f, idx) => (
+                              <tr key={idx}>
+                                <td style={{ fontWeight: '600' }}>{f.source}</td>
+                                <td>
+                                  <div style={{ display: 'flex', flexWrap: 'wrap', gap: '0.25rem' }}>
+                                    {f.destinations.map((d: string) => (
+                                      <span key={d} className="badge badge-secondary">{d}</span>
+                                    ))}
+                                  </div>
+                                </td>
+                                <td>
+                                  <span className={`badge ${f.keep_local ? 'badge-success' : 'badge-warning'}`}>
+                                    {f.keep_local ? 'Sí' : 'No'}
+                                  </span>
+                                </td>
+                                <td style={{ textAlign: 'right' }}>
+                                  <button 
+                                    className="btn-icon" 
+                                    style={{ color: '#ef4444' }}
+                                    onClick={() => handleDeleteForward(f.source)}
+                                  >
+                                    <Trash2 size={16} />
+                                  </button>
+                                </td>
+                              </tr>
+                            ))}
+                            {forwards.length === 0 && (
+                              <tr>
+                                <td colSpan={4} style={{ textAlign: 'center', padding: '3rem', color: '#94a3b8' }}>
+                                  No hay reenvíos configurados.
+                                </td>
+                              </tr>
+                            )}
+                          </tbody>
+                        </table>
+                      </div>
+                    </div>
+                  </motion.div>
+                )}
+
+                {settingsTab === 'bcc' && (
+                  <motion.div 
+                    key="bcc"
+                    initial={{ opacity: 0, x: 20 }}
+                    animate={{ opacity: 1, x: 0 }}
+                    exit={{ opacity: 0, x: -20 }}
+                    className="card" 
+                    style={{ padding: '2rem' }}
+                  >
+                    <div>
+                      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1.5rem' }}>
+                        <div>
+                          <h3 style={{ fontSize: '1rem', fontWeight: '700', color: '#1e293b' }}>Copias (BCC)</h3>
+                          <p style={{ fontSize: '0.813rem', color: '#64748b' }}>Copia oculta automática de correos (supervisión).</p>
+                        </div>
+                        <button className="btn btn-primary" onClick={() => setShowAddForwardingModal(true)}>
+                          <Plus size={16} />
+                          Nueva Copia BCC
+                        </button>
+                      </div>
+
+                      <div style={{ display: 'flex', gap: '1rem', marginBottom: '1.5rem' }}>
+                        <button 
+                          className={`btn ${bccMode === 'sender' ? 'btn-primary' : 'btn-secondary'}`}
+                          onClick={() => setBccMode('sender')}
+                          style={{ flex: 1 }}
+                        >
+                          Salientes (Sender)
+                        </button>
+                        <button 
+                          className={`btn ${bccMode === 'recipient' ? 'btn-primary' : 'btn-secondary'}`}
+                          onClick={() => setBccMode('recipient')}
+                          style={{ flex: 1 }}
+                        >
+                          Entrantes (Recipient)
+                        </button>
+                      </div>
+
+                      <div className="table-container">
+                        <table className="table">
+                          <thead>
+                            <tr>
+                              <th>{bccMode === 'sender' ? 'Emisor' : 'Receptor'}</th>
                               <th>Copiar a</th>
                               <th style={{ textAlign: 'right' }}>Acciones</th>
                             </tr>
                           </thead>
                           <tbody>
-                            {forwardingRules.map((rule, idx) => (
+                            {bccRules[bccMode].map((rule: any, idx: number) => (
                               <tr key={idx}>
                                 <td style={{ fontWeight: '600' }}>{rule.email}</td>
                                 <td>{rule.target}</td>
@@ -1941,17 +2094,17 @@ const Dashboard: React.FC = () => {
                                   <button 
                                     className="btn-icon" 
                                     style={{ color: '#ef4444' }}
-                                    onClick={() => handleDeleteForwardingRule(rule.email)}
+                                    onClick={() => handleDeleteBCCRule(rule.email, bccMode)}
                                   >
                                     <Trash2 size={16} />
                                   </button>
                                 </td>
                               </tr>
                             ))}
-                            {forwardingRules.length === 0 && (
+                            {bccRules[bccMode].length === 0 && (
                               <tr>
                                 <td colSpan={3} style={{ textAlign: 'center', padding: '3rem', color: '#94a3b8' }}>
-                                  No hay reglas de reenvío configuradas.
+                                  No hay reglas BCC ({bccMode === 'sender' ? 'salientes' : 'entrantes'}) configuradas.
                                 </td>
                               </tr>
                             )}
@@ -2279,26 +2432,6 @@ const Dashboard: React.FC = () => {
                 />
               </div>
 
-              <div style={{ display: 'flex', gap: '1.5rem', marginBottom: '2rem' }}>
-                <label style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', cursor: 'pointer', marginBottom: 0 }}>
-                  <input 
-                    type="checkbox" 
-                    checked={newSystemUser.is_admin}
-                    onChange={e => setNewSystemUser({...newSystemUser, is_admin: e.target.checked})}
-                    style={{ width: '16px', height: '16px' }}
-                  />
-                  <span style={{ fontSize: '0.875rem', color: '#475569' }}>Es Administrador</span>
-                </label>
-                <label style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', cursor: 'pointer', marginBottom: 0 }}>
-                  <input 
-                    type="checkbox" 
-                    checked={newSystemUser.is_active}
-                    onChange={e => setNewSystemUser({...newSystemUser, is_active: e.target.checked})}
-                    style={{ width: '16px', height: '16px' }}
-                  />
-                  <span style={{ fontSize: '0.875rem', color: '#475569' }}>Activo</span>
-                </label>
-              </div>
               
               <div style={{ display: 'flex', gap: '1rem', justifyContent: 'flex-end' }}>
                 <button type="button" onClick={() => setShowAddSystemUserModal(false)} className="btn btn-secondary">Cancelar</button>
@@ -2751,16 +2884,6 @@ const Dashboard: React.FC = () => {
                 <label style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', cursor: 'pointer', marginBottom: 0 }}>
                   <input 
                     type="checkbox" 
-                    checked={editSystemUserData.is_admin}
-                    onChange={e => setEditSystemUserData({...editSystemUserData, is_admin: e.target.checked})}
-                    disabled={editingSystemUser.id === user?.id}
-                    style={{ width: '16px', height: '16px' }}
-                  />
-                  <span style={{ fontSize: '0.875rem', color: '#475569' }}>Es Administrador</span>
-                </label>
-                <label style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', cursor: 'pointer', marginBottom: 0 }}>
-                  <input 
-                    type="checkbox" 
                     checked={editSystemUserData.is_active}
                     onChange={e => setEditSystemUserData({...editSystemUserData, is_active: e.target.checked})}
                     disabled={editingSystemUser.id === user?.id}
@@ -3030,7 +3153,7 @@ const Dashboard: React.FC = () => {
         </div>
       )}
 
-      {/* Add Forwarding Modal */}
+      {/* Add BCC Rule Modal */}
       {showAddForwardingModal && (
         <div style={{ 
           position: 'fixed', 
@@ -3048,12 +3171,31 @@ const Dashboard: React.FC = () => {
             className="card" 
             style={{ width: '100%', maxWidth: '480px', padding: '2.5rem', border: 'none' }}
           >
-            <h2 style={{ fontSize: '1.5rem', fontWeight: '800', marginBottom: '0.5rem', color: '#1e293b' }}>Nuevo Reenvío (BCC)</h2>
-            <p style={{ color: '#64748b', fontSize: '0.875rem', marginBottom: '2rem' }}>Enviar copia oculta de correos salientes.</p>
+            <h2 style={{ fontSize: '1.5rem', fontWeight: '800', marginBottom: '0.5rem', color: '#1e293b' }}>Nueva Copia BCC</h2>
+            <p style={{ color: '#64748b', fontSize: '0.875rem', marginBottom: '2rem' }}>Enviar copia oculta automática de correos.</p>
             
-            <form onSubmit={handleCreateForwardingRule}>
+            <form onSubmit={handleCreateBCCRule}>
+              <div style={{ display: 'flex', gap: '1rem', marginBottom: '1.5rem' }}>
+                <button 
+                  type="button"
+                  className={`btn ${bccMode === 'sender' ? 'btn-primary' : 'btn-secondary'}`}
+                  onClick={() => setBccMode('sender')}
+                  style={{ flex: 1 }}
+                >
+                  Saliente
+                </button>
+                <button 
+                  type="button"
+                  className={`btn ${bccMode === 'recipient' ? 'btn-primary' : 'btn-secondary'}`}
+                  onClick={() => setBccMode('recipient')}
+                  style={{ flex: 1 }}
+                >
+                  Entrante
+                </button>
+              </div>
+
               <div className="input-group" style={{ position: 'relative' }}>
-                <label>Buzón Emisor</label>
+                <label>{bccMode === 'sender' ? 'Buzón Emisor' : 'Buzón Receptor'}</label>
                 <input 
                   type="text" 
                   className="input-control" 
@@ -3061,16 +3203,16 @@ const Dashboard: React.FC = () => {
                   value={newForwarding.email}
                   onChange={e => {
                     setNewForwarding({...newForwarding, email: e.target.value});
-                    setActiveSuggestionField('forward-email');
+                    setActiveSuggestionField('bcc-email');
                   }}
                   onBlur={() => {
                     setNewForwarding({...newForwarding, email: ensureDomain(newForwarding.email)});
                     setTimeout(() => setActiveSuggestionField(null), 200);
                   }}
-                  onFocus={() => setActiveSuggestionField('forward-email')}
+                  onFocus={() => setActiveSuggestionField('bcc-email')}
                   required
                 />
-                {activeSuggestionField === 'forward-email' && (
+                {activeSuggestionField === 'bcc-email' && (
                   <div className="card" style={{ 
                     position: 'absolute', 
                     top: '100%', 
@@ -3096,8 +3238,7 @@ const Dashboard: React.FC = () => {
                             fontSize: '0.875rem',
                             display: 'flex',
                             alignItems: 'center',
-                            gap: '0.5rem',
-                            transition: 'background 0.2s'
+                            gap: '0.5rem'
                           }}
                           onMouseOver={e => (e.currentTarget.style.background = '#f1f5f9')}
                           onMouseOut={e => (e.currentTarget.style.background = 'transparent')}
@@ -3110,70 +3251,111 @@ const Dashboard: React.FC = () => {
                   </div>
                 )}
               </div>
-              <div className="input-group" style={{ position: 'relative' }}>
+              <div className="input-group">
                 <label>Enviar copia a</label>
                 <input 
                   type="text" 
                   className="input-control" 
                   placeholder={`supervisor@${DEFAULT_DOMAIN}`}
                   value={newForwarding.target}
-                  onChange={e => {
-                    setNewForwarding({...newForwarding, target: e.target.value});
-                    setActiveSuggestionField('forward-target');
-                  }}
-                  onBlur={() => {
-                    setNewForwarding({...newForwarding, target: ensureDomain(newForwarding.target)});
-                    setTimeout(() => setActiveSuggestionField(null), 200);
-                  }}
-                  onFocus={() => setActiveSuggestionField('forward-target')}
+                  onChange={e => setNewForwarding({...newForwarding, target: e.target.value})}
+                  onBlur={() => setNewForwarding({...newForwarding, target: ensureDomain(newForwarding.target)})}
                   required
                 />
-                {activeSuggestionField === 'forward-target' && (
-                  <div className="card" style={{ 
-                    position: 'absolute', 
-                    top: '100%', 
-                    left: 0, 
-                    right: 0, 
-                    zIndex: 1000, 
-                    marginTop: '0.25rem',
-                    maxHeight: '200px',
-                    overflowY: 'auto',
-                    padding: '0.5rem',
-                    boxShadow: '0 10px 15px -3px rgba(0, 0, 0, 0.1)'
-                  }}>
-                    {mailUsers
-                      .filter(u => u.email.toLowerCase().includes(newForwarding.target.toLowerCase()) || newForwarding.target === '')
-                      .map(u => (
-                        <div 
-                          key={u.email}
-                          onClick={() => setNewForwarding({...newForwarding, target: u.email})}
-                          style={{ 
-                            padding: '0.75rem', 
-                            cursor: 'pointer', 
-                            borderRadius: '0.5rem',
-                            fontSize: '0.875rem',
-                            display: 'flex',
-                            alignItems: 'center',
-                            gap: '0.5rem',
-                            transition: 'background 0.2s'
-                          }}
-                          onMouseOver={e => (e.currentTarget.style.background = '#f1f5f9')}
-                          onMouseOut={e => (e.currentTarget.style.background = 'transparent')}
-                        >
-                          <Users size={14} style={{ color: '#64748b' }} />
-                          {u.email}
-                        </div>
-                      ))
-                    }
-                  </div>
-                )}
               </div>
+
               <div style={{ display: 'flex', gap: '1rem', marginTop: '2rem' }}>
                 <button type="button" onClick={() => setShowAddForwardingModal(false)} className="btn btn-secondary" style={{ flex: 1 }}>
                   Cancelar
                 </button>
                 <button type="submit" className="btn btn-primary" disabled={actionLoading} style={{ flex: 1 }}>
-                  {actionLoading ? 'Guardando...' : 'Crear Regla'}
+                  {actionLoading ? 'Guardando...' : 'Crear Regla BCC'}
+                </button>
+              </div>
+            </form>
+          </motion.div>
+        </div>
+      )}
+
+      {/* Add Forward Modal (Virtual) */}
+      {showAddForwardModal && (
+        <div style={{ 
+          position: 'fixed', 
+          inset: 0, 
+          background: 'rgba(15, 23, 42, 0.4)', 
+          backdropFilter: 'blur(8px)',
+          display: 'flex', 
+          alignItems: 'center', 
+          justifyContent: 'center',
+          zIndex: 100
+        }}>
+          <motion.div 
+            initial={{ scale: 0.9, opacity: 0, y: 20 }}
+            animate={{ scale: 1, opacity: 1, y: 0 }}
+            className="card" 
+            style={{ width: '100%', maxWidth: '480px', padding: '2.5rem', border: 'none' }}
+          >
+            <h2 style={{ fontSize: '1.5rem', fontWeight: '800', marginBottom: '0.5rem', color: '#1e293b' }}>Nuevo Reenvío</h2>
+            <p style={{ color: '#64748b', fontSize: '0.875rem', marginBottom: '2rem' }}>Redirigir correos entrantes a otros destinos.</p>
+            
+            <form onSubmit={handleCreateForward}>
+              <div className="input-group">
+                <label>Dirección Origen</label>
+                <input 
+                  type="text" 
+                  className="input-control" 
+                  placeholder={`ventas@${DEFAULT_DOMAIN}`}
+                  value={newForward.source}
+                  onChange={e => setNewForward({...newForward, source: e.target.value})}
+                  onBlur={() => setNewForward({...newForward, source: ensureDomain(newForward.source)})}
+                  required
+                />
+                <p style={{ fontSize: '0.7rem', color: '#94a3b8', marginTop: '0.25rem' }}>
+                  Puede ser un buzón existente o una dirección virtual nueva.
+                </p>
+              </div>
+
+              <div className="input-group">
+                <label>Destinos (separados por coma)</label>
+                <input 
+                  type="text" 
+                  className="input-control" 
+                  placeholder="otro@gmail.com, socio@empresa.com"
+                  value={newForward.destinations}
+                  onChange={e => setNewForward({...newForward, destinations: e.target.value})}
+                  required
+                />
+              </div>
+
+              <div style={{ display: 'flex', gap: '1.5rem', marginBottom: '1.5rem' }}>
+                <label style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', cursor: 'pointer', marginBottom: 0 }}>
+                  <input 
+                    type="checkbox" 
+                    checked={newForward.keep_local}
+                    onChange={e => setNewForward({...newForward, keep_local: e.target.checked})}
+                    style={{ width: '16px', height: '16px' }}
+                  />
+                  <span style={{ fontSize: '0.875rem', color: '#475569' }}>Mantener copia local</span>
+                </label>
+              </div>
+
+              <div className="input-group">
+                <label>Descripción (opcional)</label>
+                <input 
+                  type="text" 
+                  className="input-control" 
+                  placeholder="Ej: Reenvío para soporte externo"
+                  value={newForward.description}
+                  onChange={e => setNewForward({...newForward, description: e.target.value})}
+                />
+              </div>
+              
+              <div style={{ display: 'flex', gap: '1rem', marginTop: '2rem' }}>
+                <button type="button" onClick={() => setShowAddForwardModal(false)} className="btn btn-secondary" style={{ flex: 1 }}>
+                  Cancelar
+                </button>
+                <button type="submit" className="btn btn-primary" disabled={actionLoading} style={{ flex: 1 }}>
+                  {actionLoading ? 'Guardando...' : 'Crear Reenvío'}
                 </button>
               </div>
             </form>

@@ -37,12 +37,17 @@ def startup_tasks():
     print("--- MAIL SYSTEM DIAGNOSTICS ---")
     files_to_check = {
         "USERS_FILE": USERS_FILE,
-        "POSTFIX_VIRTUAL": POSTFIX_VIRTUAL,
+        "POSTFIX_VIRTUAL": VIRTUAL_MAP,
+        "POSTFIX_VMAILBOX": VMAILBOX_MAP,
         "ALIAS_META_FILE": ALIAS_META_FILE,
         "SENDER_BCC_FILE": SENDER_BCC_FILE,
         "RECIPIENT_BCC_FILE": RECIPIENT_BCC_FILE,
         "MAIL_BASE": MAIL_BASE
     }
+    
+    # Ensure Postfix main.cf has BCC maps configured
+    if os.name != 'nt':
+        _ensure_postfix_config()
     
     # Initialize ALIAS_META_FILE if missing
     if not os.path.exists(ALIAS_META_FILE):
@@ -67,7 +72,7 @@ def startup_tasks():
     # Create default admin if database is empty
     db = next(get_db())
     try:
-        admin_user = db.query(models.User).filter(models.User.is_admin == True).first()
+        admin_user = db.query(models.User).first()
         if not admin_user:
             admin_username = os.getenv("ADMIN_USERNAME", "admin")
             admin_password = os.getenv("ADMIN_PASSWORD", "admin")
@@ -79,7 +84,6 @@ def startup_tasks():
                 username=admin_username,
                 email=admin_email,
                 full_name="Administrator",
-                is_admin=True,
                 is_active=True,
                 password_hash=auth.get_password_hash(admin_password)
             )
@@ -103,15 +107,19 @@ app.add_middleware(
 # Configuration from environment
 USERS_FILE = os.environ.get('SOOP_MAIL_USERS_FILE', os.environ.get('USERS_FILE', '/etc/soop-mail/users'))
 print(f"DEBUG: USERS_FILE path: {USERS_FILE} (exists: {os.path.exists(USERS_FILE)})")
-POSTFIX_VIRTUAL = os.environ.get('POSTFIX_VIRTUAL', '/etc/postfix/virtual')
-POSTFIX_VMAILBOX = os.environ.get('POSTFIX_VMAILBOX', '/etc/postfix/vmailbox')
-
 # Move metadata file to local directory instead of /etc/
 BASE_DIR = os.path.dirname(os.path.abspath(__file__))
 ALIAS_META_FILE = os.environ.get('ALIAS_META_FILE', os.path.join(BASE_DIR, 'aliases_meta.json'))
 
 SENDER_BCC_FILE = os.environ.get('SENDER_BCC_FILE', '/etc/postfix/sender_bcc')
 RECIPIENT_BCC_FILE = os.environ.get('RECIPIENT_BCC_FILE', '/etc/postfix/recipient_bcc')
+VIRTUAL_MAP = os.environ.get('POSTFIX_VIRTUAL', '/etc/postfix/virtual')
+VMAILBOX_MAP = os.environ.get('POSTFIX_VMAILBOX', '/etc/postfix/vmailbox')
+
+# Backward compatibility aliases
+POSTFIX_VIRTUAL = VIRTUAL_MAP
+POSTFIX_VMAILBOX = VMAILBOX_MAP
+
 POSTFIX_SENDER_RESTRICTIONS = os.environ.get('POSTFIX_SENDER_RESTRICTIONS', '/etc/postfix/sender_restrictions')
 MAIL_BASE = os.environ.get('SOOP_MAIL_BASE', os.environ.get('MAIL_BASE', '/var/mail/vhosts'))
 print(f"DEBUG: MAIL_BASE path: {MAIL_BASE} (exists: {os.path.exists(MAIL_BASE)})")
@@ -150,6 +158,35 @@ def verify_password(plain_password: str, hashed_password: str):
 def validate_email_format(email: str):
     pattern = r'^[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}$'
     return re.match(pattern, email) is not None
+
+def _ensure_postfix_config():
+    """Checks and adds recipient/sender_bcc_maps to main.cf if missing."""
+    main_cf_path = "/etc/postfix/main.cf"
+    if not os.path.exists(main_cf_path):
+        return
+        
+    try:
+        with open(main_cf_path, 'r') as f:
+            content = f.read()
+            
+        changed = False
+        if "recipient_bcc_maps" not in content:
+            content += f"\nrecipient_bcc_maps = hash:{RECIPIENT_BCC_FILE}\n"
+            changed = True
+        if "sender_bcc_maps" not in content:
+            content += f"\nsender_bcc_maps = hash:{SENDER_BCC_FILE}\n"
+            changed = True
+            
+        if changed:
+            # Try to write back (requires root)
+            try:
+                with open(main_cf_path, 'w') as f:
+                    f.write(content)
+                print(f"INFO: Updated {main_cf_path} with BCC map directives")
+            except PermissionError:
+                print(f"WARNING: No permission to update {main_cf_path}. Please add BCC maps manually.")
+    except Exception as e:
+        print(f"ERROR: Could not check {main_cf_path}: {str(e)}")
 
 def get_mailbox_stats(mail_dir: str):
     if not mail_dir:
@@ -422,7 +459,8 @@ def write_users_file(users: List[dict]):
         raise HTTPException(status_code=500, detail=f"Error writing users file: {str(e)}")
 
 def read_virtual_file():
-    aliases = []
+    """Reads both aliases and forwards from the virtual file."""
+    entries = []
     meta = {}
     if os.path.exists(ALIAS_META_FILE):
         try:
@@ -430,41 +468,45 @@ def read_virtual_file():
                 meta = json.load(f)
         except: pass
 
-    if not os.path.exists(POSTFIX_VIRTUAL):
-        return aliases
+    if not os.path.exists(VIRTUAL_MAP):
+        return entries
         
     try:
-        with open(POSTFIX_VIRTUAL, 'r') as f:
+        with open(VIRTUAL_MAP, 'r') as f:
             for line in f:
                 line = line.strip()
                 if not line or line.startswith('#'):
                     continue
                 parts = re.split(r'\s+', line, maxsplit=1)
                 if len(parts) == 2:
-                    alias_email = parts[0]
+                    email = parts[0]
                     destinations = [d.strip() for d in parts[1].split(',')]
                     
-                    alias_meta = meta.get(alias_email, {})
-                    aliases.append({
-                        "email": alias_email,
+                    entry_meta = meta.get(email, {})
+                    entries.append({
+                        "email": email,
                         "destinations": destinations,
-                        "is_dynamic": alias_meta.get('is_dynamic', False),
-                        "description": alias_meta.get('description', '')
+                        "is_dynamic": entry_meta.get('is_dynamic', False),
+                        "is_forward": entry_meta.get('is_forward', False),
+                        "keep_local": entry_meta.get('keep_local', False),
+                        "description": entry_meta.get('description', '')
                     })
     except Exception as e:
-        print(f"ERROR reading virtual file {POSTFIX_VIRTUAL}: {str(e)}")
+        print(f"ERROR reading virtual file {VIRTUAL_MAP}: {str(e)}")
     
-    print(f"DEBUG: Read {len(aliases)} aliases from {POSTFIX_VIRTUAL}")
-    return aliases
+    return entries
 
-def write_virtual_file(aliases):
+def write_virtual_file(entries):
+    """Writes both aliases and forwards to the virtual file and metadata."""
     try:
         # Save meta first
         meta = {}
-        for a in aliases:
-            meta[a['email']] = {
-                "is_dynamic": a.get('is_dynamic', False),
-                "description": a.get('description', '')
+        for e in entries:
+            meta[e['email']] = {
+                "is_dynamic": e.get('is_dynamic', False),
+                "is_forward": e.get('is_forward', False),
+                "keep_local": e.get('keep_local', False),
+                "description": e.get('description', '')
             }
         
         # Ensure directory exists
@@ -475,11 +517,11 @@ def write_virtual_file(aliases):
 
         # Expand dynamic aliases
         all_active_users = []
-        if any(a.get('is_dynamic') for a in aliases):
+        if any(e.get('is_dynamic') for e in entries):
             users = read_users_file()
             all_active_users = [u['email'] for u in users if u['status'] == 'active']
 
-        virtual_dir = os.path.dirname(POSTFIX_VIRTUAL) or '.'
+        virtual_dir = os.path.dirname(VIRTUAL_MAP) or '.'
         # Try to create directory if it doesn't exist (might fail due to permissions in /etc)
         try:
             if virtual_dir and not os.path.exists(virtual_dir):
@@ -488,19 +530,25 @@ def write_virtual_file(aliases):
 
         with NamedTemporaryFile('w', dir=virtual_dir if os.path.exists(virtual_dir) else None, delete=False) as tmp:
             temp_path = tmp.name
-            tmp.write("# Archivo de Alias Virtuales de Postfix - Generado por Soop Mail\n")
-            tmp.write(f"# Actualizado: {datetime.now()}\n\n")
-            for a in aliases:
-                dests = a['destinations']
-                if a.get('is_dynamic'):
-                    # Merge static destinations with all users
+            tmp.write("# Postfix Virtual Aliases & Forwards - Generated by Soop Mail\n")
+            tmp.write(f"# Updated: {datetime.now()}\n\n")
+            for e in entries:
+                dests = e['destinations']
+                if e.get('is_dynamic'):
                     dests = list(set(dests + all_active_users))
-                    # Remove the list itself if it was accidentally added
-                    if a['email'] in dests: dests.remove(a['email'])
+                
+                # If it's a forward and keep_local is True, ensure the source is in dests
+                if e.get('is_forward') and e.get('keep_local'):
+                    if e['email'] not in dests:
+                        dests.append(e['email'])
+                
+                # Remove self if it's an alias (not a forward) or if keep_local is False
+                if not e.get('is_forward') or not e.get('keep_local'):
+                    dests = [d for d in dests if d != e['email']]
                 
                 if not dests: continue
                 dest_str = ",".join(dests)
-                tmp.write(f"{a['email']}    {dest_str}\n")
+                tmp.write(f"{e['email']}    {dest_str}\n")
             print(f"DEBUG: Generated temporary virtual file at {temp_path}")
         
         if os.name != 'nt':
@@ -509,31 +557,27 @@ def write_virtual_file(aliases):
             except: pass
         
         try:
-            shutil.move(temp_path, POSTFIX_VIRTUAL)
+            shutil.move(temp_path, VIRTUAL_MAP)
         except Exception as e:
-            print(f"ERROR moving file to {POSTFIX_VIRTUAL}: {str(e)}")
+            print(f"ERROR moving file to {VIRTUAL_MAP}: {str(e)}")
             # Fallback for permission issues: attempt direct write if move fails
-            with open(POSTFIX_VIRTUAL, 'w') as f:
+            with open(VIRTUAL_MAP, 'w') as f:
                 with open(temp_path, 'r') as tf:
                     f.write(tf.read())
             os.unlink(temp_path)
 
-        print(f"DEBUG: Successfully updated {POSTFIX_VIRTUAL}")
+        print(f"DEBUG: Successfully updated {VIRTUAL_MAP}")
         
         # postmap & reload
         if os.name != 'nt':
             try:
-                subprocess.run(['postmap', POSTFIX_VIRTUAL], check=True, capture_output=True, text=True)
+                subprocess.run(['postmap', VIRTUAL_MAP], check=True, capture_output=True, text=True)
                 subprocess.run(['postfix', 'reload'], check=True, capture_output=True, text=True)
             except subprocess.CalledProcessError as e:
                 print(f"Error executing postfix commands: {str(e)}")
-                print(f"Stdout: {e.stdout}")
-                print(f"Stderr: {e.stderr}")
         return True
     except Exception as e:
         print(f"Error writing virtual file: {str(e)}")
-        import traceback
-        traceback.print_exc()
         return False
 
 # Auth Routes
@@ -582,7 +626,6 @@ async def register_user(
         username=user_data.username,
         email=user_data.email,
         full_name=user_data.full_name,
-        is_admin=is_first_user or user_data.is_admin,
         is_active=True,
         password_hash=auth.get_password_hash(user_data.password)
     )
@@ -676,7 +719,6 @@ async def create_system_user(
         username=user_data.username,
         email=user_data.email,
         full_name=user_data.full_name,
-        is_admin=user_data.is_admin,
         is_active=user_data.is_active,
         password_hash=auth.get_password_hash(user_data.password)
     )
@@ -708,10 +750,6 @@ async def update_system_user(
     if user_data.full_name is not None:
         user.full_name = user_data.full_name
         
-    if user_data.is_admin is not None:
-        if user_id == current_user.id and not user_data.is_admin:
-            raise HTTPException(status_code=400, detail="No puedes quitarte los permisos de administrador a ti mismo")
-        user.is_admin = user_data.is_admin
         
     if user_data.is_active is not None:
         if user_id == current_user.id and not user_data.is_active:
@@ -1011,12 +1049,14 @@ async def update_auto_responder(
     # ... (Pendiente implementar write_sieve_script)
     
 # Forwarding Rules (BCC)
-def read_forwarding_rules():
+def read_bcc_rules(mode="sender"):
+    """Reads BCC rules from the specified file (sender or recipient)."""
+    path = SENDER_BCC_FILE if mode == "sender" else RECIPIENT_BCC_FILE
     rules = []
-    if not os.path.exists(SENDER_BCC_FILE):
+    if not os.path.exists(path):
         return rules
     try:
-        with open(SENDER_BCC_FILE, 'r') as f:
+        with open(path, 'r') as f:
             for line in f:
                 line = line.strip()
                 if not line or line.startswith('#'): continue
@@ -1026,23 +1066,18 @@ def read_forwarding_rules():
     except: pass
     return rules
 
-def write_forwarding_rules(rules):
+def write_bcc_rules(rules, mode="sender"):
+    """Writes BCC rules to the specified file and runs postmap."""
+    path = SENDER_BCC_FILE if mode == "sender" else RECIPIENT_BCC_FILE
     try:
-        # Build file content (same format for sender and recipient)
-        content = "# Forwarding BCC Rules - Generated by Soop Mail\n"
+        content = f"# BCC Rules ({mode}) - Generated by Soop Mail\n"
         for r in rules:
             content += f"{r['email']}    {r['target']}\n"
             
-        # Write to SENDER_BCC_FILE
-        _write_map_file(SENDER_BCC_FILE, content)
-        
-        # Also write to RECIPIENT_BCC_FILE if it's different
-        if RECIPIENT_BCC_FILE != SENDER_BCC_FILE:
-            _write_map_file(RECIPIENT_BCC_FILE, content)
-            
+        _write_map_file(path, content)
         return True
     except Exception as e:
-        print(f"Error writing forwarding rules: {str(e)}")
+        print(f"Error writing {mode} BCC rules: {str(e)}")
         return False
 
 def _write_map_file(path, content):
@@ -1073,40 +1108,101 @@ def _write_map_file(path, content):
                 print(f"INFO: Wrote fallback diagnostic file to {fallback}")
             except: pass
 
-@app.get("/api/mail/forwarding")
-async def get_forwarding_rules(current_user: models.User = Depends(auth.get_current_active_user)):
-    return read_forwarding_rules()
+@app.get("/api/mail/bcc")
+async def get_bcc_rules(current_user: models.User = Depends(auth.get_current_active_user)):
+    return {
+        "sender": read_bcc_rules("sender"),
+        "recipient": read_bcc_rules("recipient")
+    }
 
-@app.post("/api/mail/forwarding")
-async def create_forwarding_rule(
+@app.post("/api/mail/bcc/recipient")
+async def create_recipient_bcc(
     rule: schemas.ForwardingRule,
     request: Request,
     db: Session = Depends(get_db),
     current_user: models.User = Depends(auth.get_current_active_user)
 ):
-    rules = read_forwarding_rules()
+    rules = read_bcc_rules("recipient")
+    rules = [r for r in rules if r['email'] != rule.email]
     rules.append({"email": rule.email, "target": rule.target})
-    if write_forwarding_rules(rules):
-        log_audit(db, current_user.id, "CREATE_FORWARDING", "MailForwarding", rule.email, f"Forwarding {rule.email} -> {rule.target}", request=request)
-        return {"message": "Regla de reenvío creada"}
+    if write_bcc_rules(rules, "recipient"):
+        log_audit(db, current_user.id, "CREATE_RECIPIENT_BCC", "MailBCC", rule.email, f"Recipient BCC {rule.email} -> {rule.target}", request=request)
+        return {"message": "Regla de copia (BCC) de destinatario creada"}
     raise HTTPException(status_code=500, detail="Error al guardar regla")
 
-@app.delete("/api/mail/forwarding/{email}")
-async def delete_forwarding_rule(
+@app.post("/api/mail/bcc/sender")
+async def create_sender_bcc(
+    rule: schemas.ForwardingRule,
+    request: Request,
+    db: Session = Depends(get_db),
+    current_user: models.User = Depends(auth.get_current_active_user)
+):
+    rules = read_bcc_rules("sender")
+    rules = [r for r in rules if r['email'] != rule.email]
+    rules.append({"email": rule.email, "target": rule.target})
+    if write_bcc_rules(rules, "sender"):
+        log_audit(db, current_user.id, "CREATE_SENDER_BCC", "MailBCC", rule.email, f"Sender BCC {rule.email} -> {rule.target}", request=request)
+        return {"message": "Regla de copia (BCC) de remitente creada"}
+    raise HTTPException(status_code=500, detail="Error al guardar regla")
+
+@app.delete("/api/mail/bcc/{mode}/{email}")
+async def delete_bcc_rule(
+    mode: str,
     email: str,
     request: Request,
     db: Session = Depends(get_db),
     current_user: models.User = Depends(auth.get_current_active_user)
 ):
-    rules = read_forwarding_rules()
+    if mode not in ("sender", "recipient"):
+        raise HTTPException(status_code=400, detail="Modo inválido")
+    rules = read_bcc_rules(mode)
     new_rules = [r for r in rules if r['email'] != email]
-    if write_forwarding_rules(new_rules):
-        print(f"INFO: Forwarding rule deleted: {email}")
-        log_audit(db, current_user.id, "DELETE_FORWARDING", "MailForwarding", email, f"Deleted forwarding for {email}", request=request)
-        return {"message": "Regla de reenvío eliminada"}
-    else:
-        print(f"ERROR: Failed to delete forwarding rule: {email}")
-        raise HTTPException(status_code=500, detail="Error al actualizar reglas de reenvío")
+    if write_bcc_rules(new_rules, mode):
+        log_audit(db, current_user.id, f"DELETE_{mode.upper()}_BCC", "MailBCC", email, f"Deleted {mode} BCC rule for {email}", request=request)
+        return {"message": "Regla de copia eliminada"}
+    raise HTTPException(status_code=500, detail="Error al eliminar regla")
+
+# New Forwards Endpoints
+@app.get("/api/mail/forwards")
+async def get_mail_forwards(current_user: models.User = Depends(auth.get_current_active_user)):
+    entries = read_virtual_file()
+    return [e for e in entries if e.get('is_forward')]
+
+@app.post("/api/mail/forwards")
+async def create_mail_forward(
+    forward_data: schemas.SoopMailForward,
+    request: Request,
+    db: Session = Depends(get_db),
+    current_user: models.User = Depends(auth.get_current_active_user)
+):
+    entries = read_virtual_file()
+    # Remove existing
+    entries = [e for e in entries if e['email'] != forward_data.source]
+    entries.append({
+        "email": forward_data.source,
+        "destinations": forward_data.destinations,
+        "is_forward": True,
+        "keep_local": forward_data.keep_local,
+        "description": forward_data.description
+    })
+    if write_virtual_file(entries):
+        log_audit(db, current_user.id, "CREATE_FORWARD", "MailForward", forward_data.source, f"Forward {forward_data.source} -> {forward_data.destinations} (keep_local: {forward_data.keep_local})", request=request)
+        return {"message": "Reenvío creado con éxito"}
+    raise HTTPException(status_code=500, detail="Error al guardar reenvío")
+
+@app.delete("/api/mail/forwards/{email}")
+async def delete_mail_forward(
+    email: str,
+    request: Request,
+    db: Session = Depends(get_db),
+    current_user: models.User = Depends(auth.get_current_active_user)
+):
+    entries = read_virtual_file()
+    new_entries = [e for e in entries if e['email'] != email]
+    if write_virtual_file(new_entries):
+        log_audit(db, current_user.id, "DELETE_FORWARD", "MailForward", email, f"Deleted forward for {email}", request=request)
+        return {"message": "Reenvío eliminado"}
+    raise HTTPException(status_code=500, detail="Error al eliminar reenvío")
 
 @app.put("/api/mail/users/{email}/password")
 async def update_mail_user_password(
