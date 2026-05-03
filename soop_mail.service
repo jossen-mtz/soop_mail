@@ -1,0 +1,18 @@
+[Unit]
+Description=Gunicorn instance to serve soop MAIL (FastAPI)
+After=network.target
+
+[Service]
+User=www-data
+Group=www-data
+WorkingDirectory=/var/www/soop_mail
+Environment="PATH=/var/www/soop_mail/venv/bin"
+# Es fundamental usar uvicorn.workers.UvicornWorker para FastAPI
+ExecStart=/var/www/soop_mail/venv/bin/gunicorn \
+    --workers 3 \
+    --worker-class uvicorn.workers.UvicornWorker \
+    --bind unix:/var/www/soop_mail/soop_mail.sock \
+    run:app
+
+[Install]
+WantedBy=multi-user.target

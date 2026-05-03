@@ -82,3 +82,12 @@ def main():
 
 if __name__ == "__main__":
     main()
+else:
+    # Permitir que el archivo se use como punto de entrada para ASGI (Gunicorn/Uvicorn)
+    try:
+        from backend.main import app
+    except ImportError:
+        # Fallback para diferentes estructuras de carpetas
+        import sys
+        sys.path.insert(0, os.path.join(os.path.dirname(__file__), "backend"))
+        from main import app
