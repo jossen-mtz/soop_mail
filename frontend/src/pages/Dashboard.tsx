@@ -120,7 +120,7 @@ const Dashboard: React.FC = () => {
   const [actionLoading, setActionLoading] = useState(false);
   const [notification, setNotification] = useState<{message: string, type: 'success' | 'error'} | null>(null);
   
-  const [settingsTab, setSettingsTab] = useState<'profile' | 'server' | 'logs' | 'mail-logs' | 'routing' | 'auth-console'>('profile');
+  const [settingsTab, setSettingsTab] = useState<'profile' | 'stats' | 'server' | 'logs' | 'mail-logs' | 'routing' | 'auth-console'>('profile');
   const [isGroupMode] = useState(false);
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
   const [authConsoleLogs, setAuthConsoleLogs] = useState<string[]>([]);
@@ -1196,6 +1196,24 @@ const Dashboard: React.FC = () => {
                 Mi Perfil
               </button>
               <button 
+                onClick={() => setSettingsTab('stats')}
+                style={{ 
+                  padding: '1rem 1.5rem', 
+                  borderBottom: settingsTab === 'stats' ? '2px solid #4f46e5' : '2px solid transparent',
+                  color: settingsTab === 'stats' ? '#4f46e5' : '#64748b',
+                  fontWeight: '600',
+                  fontSize: '0.875rem',
+                  background: 'none',
+                  borderTop: 'none',
+                  borderLeft: 'none',
+                  borderRight: 'none',
+                  cursor: 'pointer',
+                  whiteSpace: 'nowrap'
+                }}
+              >
+                Estadísticas
+              </button>
+              <button 
                 onClick={() => setSettingsTab('server')}
                 style={{ 
                   padding: '1rem 1.5rem', 
@@ -1405,6 +1423,175 @@ const Dashboard: React.FC = () => {
                             {actionLoading ? 'Actualizar Contraseña' : 'Actualizar Contraseña'}
                           </button>
                         </form>
+                      </div>
+                    </div>
+                  </motion.div>
+                {settingsTab === 'stats' && (
+                  <motion.div 
+                    key="stats-tab"
+                    initial={{ opacity: 0, x: 20 }}
+                    animate={{ opacity: 1, x: 0 }}
+                    exit={{ opacity: 0, x: -20 }}
+                    style={{ display: 'grid', gap: '2rem' }}
+                  >
+                    <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))', gap: '1.5rem' }}>
+                      <div className="card" style={{ padding: '1.5rem', border: 'none', background: '#ffffff', boxShadow: '0 4px 6px -1px rgba(0, 0, 0, 0.1)' }}>
+                        <div style={{ display: 'flex', alignItems: 'center', gap: '1rem', marginBottom: '1rem' }}>
+                          <div style={{ background: '#eef2ff', width: '40px', height: '40px', borderRadius: '0.75rem', display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#4f46e5' }}>
+                            <Share2 size={20} />
+                          </div>
+                          <div style={{ fontSize: '0.875rem', color: '#64748b', fontWeight: '600' }}>TOTAL ENVIADOS</div>
+                        </div>
+                        <div style={{ fontSize: '1.875rem', fontWeight: '800', color: '#1e293b' }}>{trafficStats?.summary.total_sent.toLocaleString() || 0}</div>
+                        <div style={{ fontSize: '0.75rem', color: '#64748b', marginTop: '0.5rem' }}>
+                          Promedio diario: <span style={{ fontWeight: '700', color: '#4f46e5' }}>{trafficStats?.summary.avg_sent.toFixed(1) || 0}</span>
+                        </div>
+                      </div>
+
+                      <div className="card" style={{ padding: '1.5rem', border: 'none', background: '#ffffff', boxShadow: '0 4px 6px -1px rgba(0, 0, 0, 0.1)' }}>
+                        <div style={{ display: 'flex', alignItems: 'center', gap: '1rem', marginBottom: '1rem' }}>
+                          <div style={{ background: '#ecfdf5', width: '40px', height: '40px', borderRadius: '0.75rem', display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#10b981' }}>
+                            <Mail size={20} />
+                          </div>
+                          <div style={{ fontSize: '0.875rem', color: '#64748b', fontWeight: '600' }}>TOTAL RECIBIDOS</div>
+                        </div>
+                        <div style={{ fontSize: '1.875rem', fontWeight: '800', color: '#1e293b' }}>{trafficStats?.summary.total_received.toLocaleString() || 0}</div>
+                        <div style={{ fontSize: '0.75rem', color: '#64748b', marginTop: '0.5rem' }}>
+                          Promedio diario: <span style={{ fontWeight: '700', color: '#10b981' }}>{trafficStats?.summary.avg_received.toFixed(1) || 0}</span>
+                        </div>
+                      </div>
+
+                      <div className="card" style={{ padding: '1.5rem', border: 'none', background: '#ffffff', boxShadow: '0 4px 6px -1px rgba(0, 0, 0, 0.1)' }}>
+                        <div style={{ display: 'flex', alignItems: 'center', gap: '1rem', marginBottom: '1rem' }}>
+                          <div style={{ background: '#fff7ed', width: '40px', height: '40px', borderRadius: '0.75rem', display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#f97316' }}>
+                            <Activity size={20} />
+                          </div>
+                          <div style={{ fontSize: '0.875rem', color: '#64748b', fontWeight: '600' }}>PICO DE TRÁFICO</div>
+                        </div>
+                        <div style={{ fontSize: '1.875rem', fontWeight: '800', color: '#1e293b' }}>{trafficStats?.summary.peak_day_total.toLocaleString() || 0}</div>
+                        <div style={{ fontSize: '0.75rem', color: '#64748b', marginTop: '0.5rem' }}>
+                          Máximo en un día
+                        </div>
+                      </div>
+                    </div>
+
+                    <div className="card" style={{ padding: '2rem' }}>
+                      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '2rem' }}>
+                        <div>
+                          <h3 style={{ fontSize: '1.125rem', fontWeight: '700', color: '#1e293b' }}>Actividad de Correo</h3>
+                          <p style={{ color: '#64748b', fontSize: '0.813rem' }}>Histórico de los últimos {trafficPeriod} días</p>
+                        </div>
+                        <div style={{ display: 'flex', gap: '0.5rem' }}>
+                          {[7, 30, 90].map(d => (
+                            <button 
+                              key={d} 
+                              onClick={() => setTrafficPeriod(d)} 
+                              style={{ 
+                                padding: '0.4rem 0.875rem', 
+                                fontSize: '0.75rem', 
+                                borderRadius: '0.5rem', 
+                                background: trafficPeriod === d ? '#4f46e5' : '#f1f5f9', 
+                                color: trafficPeriod === d ? '#fff' : '#64748b', 
+                                border: 'none',
+                                fontWeight: '600',
+                                cursor: 'pointer'
+                              }}
+                            >
+                              {d}d
+                            </button>
+                          ))}
+                        </div>
+                      </div>
+                      
+                      {trafficStats ? (
+                        <div style={{ height: '350px', width: '100%' }}>
+                          <ResponsiveContainer width="100%" height="100%">
+                            <AreaChart data={trafficStats.history}>
+                              <defs>
+                                <linearGradient id="colorSentTab" x1="0" y1="0" x2="0" y2="1">
+                                  <stop offset="5%" stopColor="#4f46e5" stopOpacity={0.3}/>
+                                  <stop offset="95%" stopColor="#4f46e5" stopOpacity={0}/>
+                                </linearGradient>
+                                <linearGradient id="colorReceivedTab" x1="0" y1="0" x2="0" y2="1">
+                                  <stop offset="5%" stopColor="#10b981" stopOpacity={0.3}/>
+                                  <stop offset="95%" stopColor="#10b981" stopOpacity={0}/>
+                                </linearGradient>
+                              </defs>
+                              <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#f1f5f9" />
+                              <XAxis 
+                                dataKey="date" 
+                                tick={{ fontSize: 12, fill: '#94a3b8' }} 
+                                axisLine={false}
+                                tickLine={false}
+                                tickFormatter={(str) => format(new Date(str), 'dd MMM')}
+                              />
+                              <YAxis 
+                                tick={{ fontSize: 12, fill: '#94a3b8' }} 
+                                axisLine={false}
+                                tickLine={false}
+                              />
+                              <Tooltip 
+                                contentStyle={{ 
+                                  background: '#ffffff', 
+                                  border: 'none', 
+                                  borderRadius: '0.75rem', 
+                                  boxShadow: '0 10px 15px -3px rgba(0, 0, 0, 0.1)'
+                                }}
+                                labelFormatter={(label) => format(new Date(label), 'EEEE, dd MMMM yyyy')}
+                              />
+                              <Area 
+                                type="monotone" 
+                                dataKey="sent_count" 
+                                name="Enviados"
+                                stroke="#4f46e5" 
+                                strokeWidth={3}
+                                fillOpacity={1} 
+                                fill="url(#colorSentTab)" 
+                              />
+                              <Area 
+                                type="monotone" 
+                                dataKey="received_count" 
+                                name="Recibidos"
+                                stroke="#10b981" 
+                                strokeWidth={3}
+                                fillOpacity={1} 
+                                fill="url(#colorReceivedTab)" 
+                              />
+                            </AreaChart>
+                          </ResponsiveContainer>
+                        </div>
+                      ) : (
+                        <div style={{ height: '350px', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                          <div className="animate-spin" style={{ width: '30px', height: '30px', border: '3px solid #f3f3f3', borderTop: '3px solid #4f46e5', borderRadius: '50%' }}></div>
+                        </div>
+                      )}
+                    </div>
+
+                    <div className="card" style={{ padding: '0', overflow: 'hidden' }}>
+                      <div style={{ padding: '1.25rem 1.5rem', borderBottom: '1px solid #f1f5f9' }}>
+                        <h3 style={{ fontSize: '1rem', fontWeight: '700', color: '#1e293b' }}>Registro Diario</h3>
+                      </div>
+                      <div className="table-container">
+                        <table>
+                          <thead>
+                            <tr>
+                              <th>Fecha</th>
+                              <th>Enviados</th>
+                              <th>Recibidos</th>
+                              <th>Total</th>
+                            </tr>
+                          </thead>
+                          <tbody>
+                            {trafficStats?.history.slice().reverse().map((day: any) => (
+                              <tr key={day.date}>
+                                <td style={{ fontWeight: '600' }}>{format(new Date(day.date), 'dd/MM/yyyy')}</td>
+                                <td style={{ color: '#4f46e5', fontWeight: '700' }}>{day.sent_count}</td>
+                                <td style={{ color: '#10b981', fontWeight: '700' }}>{day.received_count}</td>
+                                <td style={{ fontWeight: '800' }}>{day.total}</td>
+                              </tr>
+                            ))}
+                          </tbody>
+                        </table>
                       </div>
                     </div>
                   </motion.div>
