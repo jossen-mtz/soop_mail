@@ -1655,16 +1655,87 @@ if os.path.exists(STATIC_DIR):
 else:
     print(f"WARNING: STATIC_DIR not found at {STATIC_DIR}. Frontend will not be served.")
 
-if __name__ == "__main__":
-    import uvicorn
-    uvicorn.run(app, host="0.0.0.0", port=8000)
+# Email Traffic Logic
+def sync_email_traffic(db: Session):
+    """Parses mail logs to update email traffic statistics."""
+    log_paths = ['/var/log/mail.log', '/var/log/mail.log.1']
+    target_log = None
+    for p in log_paths:
+        if os.path.exists(p):
+            target_log = p
+            break
+    
+    if not target_log:
+        return
+        
+    today = datetime.utcnow().replace(hour=0, minute=0, second=0, microsecond=0)
+    
+    try:
+        sent_today = 0
+        received_today = 0
+        qids_seen = set()
+        
+        try:
+            # We check the last 5000 lines for the sync
+            result = subprocess.run(['tail', '-n', '5000', target_log], capture_output=True, text=True)
+            lines = result.stdout.splitlines()
+        except:
+            with open(target_log, 'r', errors='ignore') as f:
+                lines = f.readlines()[-5000:]
+                
+        for line in lines:
+            if "status=sent" in line:
+                match = re.search(r'([A-F0-9]{10,12}):', line)
+                if match:
+                    qid = match.group(1)
+                    if qid not in qids_seen:
+                        qids_seen.add(qid)
+                        if "sasl_username=" in line or "relay=127.0.0.1" in line:
+                            sent_today += 1
+                        elif any(r in line for r in ["relay=local", "relay=virtual", "relay=lmtp", "relay=dovecot"]):
+                            received_today += 1
+                            
+        traffic = db.query(models.EmailTraffic).filter(models.EmailTraffic.date == today).first()
+        if not traffic:
+            traffic = models.EmailTraffic(date=today, sent_count=sent_today, received_count=received_today)
+            db.add(traffic)
+        else:
+            traffic.sent_count = max(traffic.sent_count, sent_today)
+            traffic.received_count = max(traffic.received_count, received_today)
+        
+        db.commit()
+    except Exception as e:
+        print(f"Error syncing traffic: {str(e)}")
+
+@app.get("/api/mail/traffic", response_model=schemas.TrafficStatsResponse)
+async def get_mail_traffic(
+    days: int = 30,
+    db: Session = Depends(get_db),
+    current_user: models.User = Depends(auth.get_current_active_user)
+):
+    if os.name != 'nt':
+        sync_email_traffic(db)
+        
+    history_objs = db.query(models.EmailTraffic).order_by(models.EmailTraffic.date.desc()).limit(days).all()
+    history_objs.reverse()
+    
+    history = []
+    total_sent = 0
+    total_received = 0
+    peak_day_total = 0
+    
+    for t in history_objs:
+        history.append({
+            "date": t.date.strftime("%Y-%m-%d"),
+            "sent": t.sent_count,
+            "received": t.received_count,
             "total": t.sent_count + t.received_count
         })
         total_sent += t.sent_count
         total_received += t.received_count
         if (t.sent_count + t.received_count) > peak_day_total:
             peak_day_total = t.sent_count + t.received_count
-    
+            
     num_days = len(history) if len(history) > 0 else 1
     
     return {
@@ -1681,30 +1752,21 @@ if __name__ == "__main__":
 
 @app.post("/api/mail/traffic/track")
 async def track_mail_traffic(
-    direction: str, # "sent" or "received"
+    direction: str,
     count: int = 1,
-    db: Session = Depends(get_db),
-    # In a real scenario, this would be called by a local hook/milter with a secret key
-    # For now, we'll allow it if authorized for demo purposes, 
-    # but ideally it should be internal-only.
+    db: Session = Depends(get_db)
 ):
     if direction not in ("sent", "received"):
         raise HTTPException(status_code=400, detail="Invalid direction")
-        
     today = datetime.utcnow().replace(hour=0, minute=0, second=0, microsecond=0)
-    
     traffic = db.query(models.EmailTraffic).filter(models.EmailTraffic.date == today).first()
     if not traffic:
         traffic = models.EmailTraffic(date=today)
         db.add(traffic)
-        
-    if direction == "sent":
-        traffic.sent_count += count
-    else:
-        traffic.received_count += count
-        
+    if direction == "sent": traffic.sent_count += count
+    else: traffic.received_count += count
     db.commit()
-    return {"status": "success", "date": today, "direction": direction, "new_total": traffic.sent_count if direction == "sent" else traffic.received_count}
+    return {"status": "success"}
 
 @app.post("/api/system/traffic/populate-mock")
 async def populate_mock_traffic(
@@ -1712,9 +1774,7 @@ async def populate_mock_traffic(
     db: Session = Depends(get_db),
     current_user: models.User = Depends(auth.get_current_active_user)
 ):
-    """Utility to populate mock data for visualization testing."""
     import random
-    
     for i in range(days):
         date = datetime.utcnow().replace(hour=0, minute=0, second=0, microsecond=0) - timedelta(days=i)
         traffic = db.query(models.EmailTraffic).filter(models.EmailTraffic.date == date).first()
@@ -1728,32 +1788,8 @@ async def populate_mock_traffic(
         else:
             traffic.sent_count = random.randint(10, 150)
             traffic.received_count = random.randint(20, 250)
-            
     db.commit()
     return {"message": f"Populated {days} days of mock traffic data"}
-
-if os.path.exists(STATIC_DIR):
-    app.mount("/assets", StaticFiles(directory=os.path.join(STATIC_DIR, "assets")), name="assets")
-
-    @app.get("/{full_path:path}")
-    async def serve_frontend(full_path: str):
-        # API requests that reach here are truly Not Found
-        if full_path.startswith("api/"):
-            raise HTTPException(status_code=404, detail="API endpoint not found")
-        
-        # 1. Try to serve exact file from static
-        file_path = os.path.join(STATIC_DIR, full_path)
-        if full_path and os.path.isfile(file_path):
-            return FileResponse(file_path)
-            
-        # 2. Otherwise serve index.html (SPA logic)
-        index_path = os.path.join(STATIC_DIR, "index.html")
-        if os.path.exists(index_path):
-            return FileResponse(index_path)
-        
-        raise HTTPException(status_code=404, detail="Frontend build (index.html) not found in static folder")
-else:
-    print(f"WARNING: STATIC_DIR not found at {STATIC_DIR}. Frontend will not be served.")
 
 if __name__ == "__main__":
     import uvicorn

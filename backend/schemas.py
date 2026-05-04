@@ -207,7 +207,11 @@ class SystemStatus(BaseModel):
     status: str
     service_active: bool
     details: dict
-    received_count: int
+
+class TrafficHistory(BaseModel):
+    date: str
+    sent: int
+    received: int
     total: int
 
 class TrafficStatsSummary(BaseModel):
