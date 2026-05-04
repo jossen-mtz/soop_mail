@@ -219,6 +219,20 @@ class EmailTrafficOut(EmailTrafficBase):
     class Config:
         from_attributes = True
 
+class TrafficHistory(BaseModel):
+    date: str
+    sent_count: int
+    received_count: int
+    total: int
+
+class TrafficStatsSummary(BaseModel):
+    total_sent: int
+    total_received: int
+    days_analyzed: int
+    avg_sent: float
+    avg_received: float
+    peak_day_total: int
+
 class TrafficStatsResponse(BaseModel):
-    daily: List[EmailTrafficOut]
-    summary: dict
+    history: List[TrafficHistory]
+    summary: TrafficStatsSummary

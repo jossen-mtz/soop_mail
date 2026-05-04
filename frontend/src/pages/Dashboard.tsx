@@ -113,7 +113,8 @@ const Dashboard: React.FC = () => {
     restart_soop_mail: true
   });
   
-  const activeTab = location.pathname === '/configuracion' ? 'settings' : 'users';
+  const activeTab = location.pathname === '/configuracion' ? 'settings' : 
+                   location.pathname === '/estadisticas' ? 'stats' : 'users';
   
   const [showPassword, setShowPassword] = useState(false);
   const [actionLoading, setActionLoading] = useState(false);
@@ -463,6 +464,8 @@ const Dashboard: React.FC = () => {
       } else if (settingsTab === 'server') {
         fetchTrafficStats(trafficPeriod);
       }
+    } else if (activeTab === 'stats') {
+      fetchTrafficStats(trafficPeriod);
     }
   }, [activeTab, settingsTab, trafficPeriod]);
 
@@ -623,7 +626,6 @@ const Dashboard: React.FC = () => {
       <div 
         className="mobile-top-bar"
         style={{
-          display: 'none',
           alignItems: 'center',
           gap: '1rem',
           padding: '1rem',
@@ -646,7 +648,6 @@ const Dashboard: React.FC = () => {
             color: '#4f46e5',
             cursor: 'pointer',
             boxShadow: '0 1px 2px 0 rgba(0, 0, 0, 0.05)',
-            display: 'flex',
             alignItems: 'center',
             justifyContent: 'center'
           }}
@@ -745,6 +746,28 @@ const Dashboard: React.FC = () => {
           >
             <Users size={18} />
             <span>Usuarios</span>
+          </NavLink>
+          <NavLink 
+            to="/estadisticas"
+            onClick={() => setIsSidebarOpen(false)}
+            style={({ isActive }) => ({ 
+              display: 'flex', 
+              alignItems: 'center', 
+              gap: '0.75rem', 
+              padding: '0.75rem 1rem', 
+              background: isActive ? '#f1f5f9' : 'transparent', 
+              color: isActive ? '#4f46e5' : '#64748b',
+              borderRadius: '0.75rem',
+              marginBottom: '0.5rem',
+              fontWeight: isActive ? '600' : '500',
+              fontSize: '0.875rem',
+              cursor: 'pointer',
+              transition: 'all 0.2s',
+              textDecoration: 'none'
+            })}
+          >
+            <Activity size={18} />
+            <span>Estadísticas</span>
           </NavLink>
           <NavLink 
             to="/configuracion"
@@ -971,6 +994,172 @@ const Dashboard: React.FC = () => {
                             </button>
                           </div>
                         </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            </div>
+          </div>
+        ) : activeTab === 'stats' ? (
+          <div style={{ width: '100%' }}>
+            <header style={{ marginBottom: '2.5rem' }}>
+              <h1 style={{ fontSize: '1.875rem', fontWeight: '800', color: '#1e293b', marginBottom: '0.25rem' }}>Estadísticas de Tráfico</h1>
+              <p style={{ color: '#64748b', fontSize: '0.938rem' }}>Análisis detallado de correos enviados y recibidos por día.</p>
+            </header>
+
+            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(240px, 1fr))', gap: '1.5rem', marginBottom: '2.5rem' }}>
+              <div className="card" style={{ padding: '1.5rem', border: 'none', background: '#ffffff', boxShadow: '0 4px 6px -1px rgba(0, 0, 0, 0.1)' }}>
+                <div style={{ display: 'flex', alignItems: 'center', gap: '1rem', marginBottom: '1rem' }}>
+                  <div style={{ background: '#eef2ff', width: '40px', height: '40px', borderRadius: '0.75rem', display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#4f46e5' }}>
+                    <Share2 size={20} />
+                  </div>
+                  <div style={{ fontSize: '0.875rem', color: '#64748b', fontWeight: '600' }}>TOTAL ENVIADOS</div>
+                </div>
+                <div style={{ fontSize: '1.875rem', fontWeight: '800', color: '#1e293b' }}>{trafficStats?.summary.total_sent.toLocaleString() || 0}</div>
+                <div style={{ fontSize: '0.75rem', color: '#64748b', marginTop: '0.5rem' }}>
+                  Promedio diario: <span style={{ fontWeight: '700', color: '#4f46e5' }}>{trafficStats?.summary.avg_sent.toFixed(1) || 0}</span>
+                </div>
+              </div>
+
+              <div className="card" style={{ padding: '1.5rem', border: 'none', background: '#ffffff', boxShadow: '0 4px 6px -1px rgba(0, 0, 0, 0.1)' }}>
+                <div style={{ display: 'flex', alignItems: 'center', gap: '1rem', marginBottom: '1rem' }}>
+                  <div style={{ background: '#ecfdf5', width: '40px', height: '40px', borderRadius: '0.75rem', display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#10b981' }}>
+                    <Mail size={20} />
+                  </div>
+                  <div style={{ fontSize: '0.875rem', color: '#64748b', fontWeight: '600' }}>TOTAL RECIBIDOS</div>
+                </div>
+                <div style={{ fontSize: '1.875rem', fontWeight: '800', color: '#1e293b' }}>{trafficStats?.summary.total_received.toLocaleString() || 0}</div>
+                <div style={{ fontSize: '0.75rem', color: '#64748b', marginTop: '0.5rem' }}>
+                  Promedio diario: <span style={{ fontWeight: '700', color: '#10b981' }}>{trafficStats?.summary.avg_received.toFixed(1) || 0}</span>
+                </div>
+              </div>
+
+              <div className="card" style={{ padding: '1.5rem', border: 'none', background: '#ffffff', boxShadow: '0 4px 6px -1px rgba(0, 0, 0, 0.1)' }}>
+                <div style={{ display: 'flex', alignItems: 'center', gap: '1rem', marginBottom: '1rem' }}>
+                  <div style={{ background: '#fff7ed', width: '40px', height: '40px', borderRadius: '0.75rem', display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#f97316' }}>
+                    <Activity size={20} />
+                  </div>
+                  <div style={{ fontSize: '0.875rem', color: '#64748b', fontWeight: '600' }}>PICO DE TRÁFICO</div>
+                </div>
+                <div style={{ fontSize: '1.875rem', fontWeight: '800', color: '#1e293b' }}>{trafficStats?.summary.peak_day_total.toLocaleString() || 0}</div>
+                <div style={{ fontSize: '0.75rem', color: '#64748b', marginTop: '0.5rem' }}>
+                  Máximo correos en un día
+                </div>
+              </div>
+            </div>
+
+            <div className="card" style={{ padding: '2rem', marginBottom: '2.5rem' }}>
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '2rem' }}>
+                <h3 style={{ fontSize: '1.125rem', fontWeight: '700', color: '#1e293b' }}>Histórico de Tráfico</h3>
+                <div style={{ display: 'flex', gap: '0.5rem' }}>
+                  {[7, 14, 30, 90].map(days => (
+                    <button
+                      key={days}
+                      onClick={() => setTrafficPeriod(days)}
+                      style={{
+                        padding: '0.4rem 0.875rem',
+                        fontSize: '0.75rem',
+                        borderRadius: '0.5rem',
+                        background: trafficPeriod === days ? '#4f46e5' : '#f1f5f9',
+                        color: trafficPeriod === days ? '#ffffff' : '#64748b',
+                        border: 'none',
+                        fontWeight: '600',
+                        cursor: 'pointer'
+                      }}
+                    >
+                      {days}d
+                    </button>
+                  ))}
+                </div>
+              </div>
+
+              {trafficStats ? (
+                <div style={{ height: '400px', width: '100%' }}>
+                  <ResponsiveContainer width="100%" height="100%">
+                    <AreaChart data={trafficStats.history}>
+                      <defs>
+                        <linearGradient id="colorSent" x1="0" y1="0" x2="0" y2="1">
+                          <stop offset="5%" stopColor="#4f46e5" stopOpacity={0.3}/>
+                          <stop offset="95%" stopColor="#4f46e5" stopOpacity={0}/>
+                        </linearGradient>
+                        <linearGradient id="colorReceived" x1="0" y1="0" x2="0" y2="1">
+                          <stop offset="5%" stopColor="#10b981" stopOpacity={0.3}/>
+                          <stop offset="95%" stopColor="#10b981" stopOpacity={0}/>
+                        </linearGradient>
+                      </defs>
+                      <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#f1f5f9" />
+                      <XAxis 
+                        dataKey="date" 
+                        tick={{ fontSize: 12, fill: '#94a3b8' }} 
+                        axisLine={false}
+                        tickLine={false}
+                        tickFormatter={(str) => format(new Date(str), 'dd MMM')}
+                      />
+                      <YAxis 
+                        tick={{ fontSize: 12, fill: '#94a3b8' }} 
+                        axisLine={false}
+                        tickLine={false}
+                      />
+                      <Tooltip 
+                        contentStyle={{ 
+                          background: '#ffffff', 
+                          border: 'none', 
+                          borderRadius: '0.75rem', 
+                          boxShadow: '0 10px 15px -3px rgba(0, 0, 0, 0.1)'
+                        }}
+                        labelFormatter={(label) => format(new Date(label), 'EEEE, dd MMMM yyyy')}
+                      />
+                      <Legend verticalAlign="top" height={40} iconType="circle" />
+                      <Area 
+                        type="monotone" 
+                        dataKey="sent_count" 
+                        name="Enviados"
+                        stroke="#4f46e5" 
+                        strokeWidth={3}
+                        fillOpacity={1} 
+                        fill="url(#colorSent)" 
+                      />
+                      <Area 
+                        type="monotone" 
+                        dataKey="received_count" 
+                        name="Recibidos"
+                        stroke="#10b981" 
+                        strokeWidth={3}
+                        fillOpacity={1} 
+                        fill="url(#colorReceived)" 
+                      />
+                    </AreaChart>
+                  </ResponsiveContainer>
+                </div>
+              ) : (
+                <div style={{ height: '400px', display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#94a3b8' }}>
+                  Cargando datos...
+                </div>
+              )}
+            </div>
+
+            <div className="card" style={{ padding: '0', overflow: 'hidden' }}>
+              <div style={{ padding: '1.25rem 1.5rem', borderBottom: '1px solid #f1f5f9' }}>
+                <h3 style={{ fontSize: '1rem', fontWeight: '700', color: '#1e293b' }}>Detalle Diario</h3>
+              </div>
+              <div className="table-container">
+                <table>
+                  <thead>
+                    <tr>
+                      <th>Fecha</th>
+                      <th>Enviados</th>
+                      <th>Recibidos</th>
+                      <th>Total</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {trafficStats?.history.slice().reverse().map((day: any) => (
+                      <tr key={day.date}>
+                        <td style={{ fontWeight: '600' }}>{format(new Date(day.date), 'dd/MM/yyyy')}</td>
+                        <td style={{ color: '#4f46e5', fontWeight: '700' }}>{day.sent_count}</td>
+                        <td style={{ color: '#10b981', fontWeight: '700' }}>{day.received_count}</td>
+                        <td style={{ fontWeight: '800' }}>{day.total}</td>
                       </tr>
                     ))}
                   </tbody>
@@ -1456,131 +1645,16 @@ const Dashboard: React.FC = () => {
                               </div>
                             </div>
                           ))}
-                          )}
                         </div>
                       </div>
                     </div>
 
-                    {/* Email Traffic Visualization */}
-                    <div className="card" style={{ padding: '1.5rem' }}>
-                      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1.5rem' }}>
-                        <div>
-                          <h4 style={{ fontSize: '1rem', fontWeight: '700', color: '#1e293b', display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
-                            <Activity size={18} style={{ color: '#4f46e5' }} />
-                            Estadísticas de Tráfico de Correo
-                          </h4>
-                          <p style={{ color: '#64748b', fontSize: '0.75rem' }}>Enviados vs Recibidos en los últimos {trafficPeriod} días</p>
-                        </div>
-                        <div style={{ display: 'flex', gap: '0.5rem' }}>
-                          {[7, 14, 30, 90].map(days => (
-                            <button
-                              key={days}
-                              onClick={() => setTrafficPeriod(days)}
-                              style={{
-                                padding: '0.4rem 0.75rem',
-                                fontSize: '0.75rem',
-                                borderRadius: '0.5rem',
-                                background: trafficPeriod === days ? '#eef2ff' : 'transparent',
-                                color: trafficPeriod === days ? '#4f46e5' : '#64748b',
-                                border: trafficPeriod === days ? '1px solid #4f46e5' : '1px solid #e2e8f0',
-                                fontWeight: trafficPeriod === days ? '600' : '400',
-                                cursor: 'pointer'
-                              }}
-                            >
-                              {days}d
-                            </button>
-                          ))}
-                        </div>
-                      </div>
-
-                      {trafficStats ? (
-                        <>
-                          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(180px, 1fr))', gap: '1rem', marginBottom: '2rem' }}>
-                            <div style={{ padding: '1rem', background: '#f8fafc', borderRadius: '0.75rem', border: '1px solid #f1f5f9' }}>
-                              <div style={{ fontSize: '0.7rem', color: '#64748b', fontWeight: '600', textTransform: 'uppercase', marginBottom: '0.25rem' }}>Total Enviados</div>
-                              <div style={{ fontSize: '1.25rem', fontWeight: '800', color: '#1e293b' }}>{trafficStats.summary.total_sent}</div>
-                            </div>
-                            <div style={{ padding: '1rem', background: '#f8fafc', borderRadius: '0.75rem', border: '1px solid #f1f5f9' }}>
-                              <div style={{ fontSize: '0.7rem', color: '#64748b', fontWeight: '600', textTransform: 'uppercase', marginBottom: '0.25rem' }}>Total Recibidos</div>
-                              <div style={{ fontSize: '1.25rem', fontWeight: '800', color: '#1e293b' }}>{trafficStats.summary.total_received}</div>
-                            </div>
-                            <div style={{ padding: '1rem', background: '#f8fafc', borderRadius: '0.75rem', border: '1px solid #f1f5f9' }}>
-                              <div style={{ fontSize: '0.7rem', color: '#64748b', fontWeight: '600', textTransform: 'uppercase', marginBottom: '0.25rem' }}>Promedio Diario</div>
-                              <div style={{ fontSize: '1.25rem', fontWeight: '800', color: '#1e293b' }}>{(trafficStats.summary.avg_sent + trafficStats.summary.avg_received).toFixed(1)}</div>
-                            </div>
-                            <div style={{ padding: '1rem', background: '#f8fafc', borderRadius: '0.75rem', border: '1px solid #f1f5f9' }}>
-                              <div style={{ fontSize: '0.7rem', color: '#64748b', fontWeight: '600', textTransform: 'uppercase', marginBottom: '0.25rem' }}>Día Pico</div>
-                              <div style={{ fontSize: '1.25rem', fontWeight: '800', color: '#1e293b' }}>{trafficStats.summary.peak_day_total}</div>
-                            </div>
-                          </div>
-
-                          <div style={{ width: '100%', height: '350px' }}>
-                            <ResponsiveContainer width="100%" height="100%">
-                              <AreaChart
-                                data={trafficStats.history}
-                                margin={{ top: 10, right: 10, left: 0, bottom: 0 }}
-                              >
-                                <defs>
-                                  <linearGradient id="colorSent" x1="0" y1="0" x2="0" y2="1">
-                                    <stop offset="5%" stopColor="#6366f1" stopOpacity={0.1}/>
-                                    <stop offset="95%" stopColor="#6366f1" stopOpacity={0}/>
-                                  </linearGradient>
-                                  <linearGradient id="colorReceived" x1="0" y1="0" x2="0" y2="1">
-                                    <stop offset="5%" stopColor="#10b981" stopOpacity={0.1}/>
-                                    <stop offset="95%" stopColor="#10b981" stopOpacity={0}/>
-                                  </linearGradient>
-                                </defs>
-                                <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#f1f5f9" />
-                                <XAxis 
-                                  dataKey="date" 
-                                  tick={{ fontSize: 10, fill: '#94a3b8' }} 
-                                  axisLine={false}
-                                  tickLine={false}
-                                  tickFormatter={(str) => format(new Date(str), 'dd MMM')}
-                                />
-                                <YAxis 
-                                  tick={{ fontSize: 10, fill: '#94a3b8' }} 
-                                  axisLine={false}
-                                  tickLine={false}
-                                />
-                                <Tooltip 
-                                  contentStyle={{ 
-                                    background: '#ffffff', 
-                                    border: '1px solid #e2e8f0', 
-                                    borderRadius: '0.75rem', 
-                                    boxShadow: '0 4px 6px -1px rgb(0 0 0 / 0.1)',
-                                    fontSize: '12px'
-                                  }}
-                                  labelFormatter={(label) => format(new Date(label), 'EEEE, dd MMMM yyyy')}
-                                />
-                                <Legend verticalAlign="top" height={36} iconType="circle" />
-                                <Area 
-                                  type="monotone" 
-                                  dataKey="sent_count" 
-                                  name="Enviados"
-                                  stroke="#6366f1" 
-                                  strokeWidth={2}
-                                  fillOpacity={1} 
-                                  fill="url(#colorSent)" 
-                                />
-                                <Area 
-                                  type="monotone" 
-                                  dataKey="received_count" 
-                                  name="Recibidos"
-                                  stroke="#10b981" 
-                                  strokeWidth={2}
-                                  fillOpacity={1} 
-                                  fill="url(#colorReceived)" 
-                                />
-                              </AreaChart>
-                            </ResponsiveContainer>
-                          </div>
-                        </>
-                      ) : (
-                        <div style={{ height: '300px', display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#94a3b8' }}>
-                          Cargando datos de tráfico...
-                        </div>
-                      )}
+                    {/* Email Traffic Notification */}
+                    <div className="card" style={{ padding: '2rem', textAlign: 'center', color: '#64748b' }}>
+                      <p>Las estadísticas detalladas ahora están disponibles en la pestaña dedicada <strong>Estadísticas</strong> en el menú lateral.</p>
+                      <NavLink to="/estadisticas" className="btn btn-primary" style={{ marginTop: '1rem', display: 'inline-flex' }}>
+                        Ir a Estadísticas
+                      </NavLink>
                     </div>
                   </motion.div>
                 )}
