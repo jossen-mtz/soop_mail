@@ -21,23 +21,18 @@ echo "[2/4] Creando archivo /etc/systemd/system/$SERVICE_NAME.service..."
 cat <<EOF > /etc/systemd/system/$SERVICE_NAME.service
 [Unit]
 Description=Gunicorn instance to serve soop MAIL (FastAPI)
-After=network.target mysql.service mariadb.service
-Wants=mysql.service mariadb.service
+After=network.target
 
 [Service]
 User=$USER
 Group=$GROUP
 WorkingDirectory=$PROJECT_DIR
-Environment="PATH=$PROJECT_DIR/venv/bin:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin"
-Environment="PYTHONPATH=$PROJECT_DIR:$PROJECT_DIR/backend"
-Environment="APP_ENV=prod"
-
-ExecStart=$PROJECT_DIR/venv/bin/python -m gunicorn \\
+Environment="PATH=$PROJECT_DIR/venv/bin"
+# Ejecutamos con el worker de uvicorn necesario para FastAPI
+ExecStart=$PROJECT_DIR/venv/bin/gunicorn \\
     --workers 3 \\
     --worker-class uvicorn.workers.UvicornWorker \\
     --bind unix:$PROJECT_DIR/soop_mail.sock \\
-    --access-logfile - \\
-    --error-logfile - \\
     run:app
 
 [Install]

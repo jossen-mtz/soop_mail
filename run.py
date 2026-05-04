@@ -84,24 +84,10 @@ if __name__ == "__main__":
     main()
 else:
     # Permitir que el archivo se use como punto de entrada para ASGI (Gunicorn/Uvicorn)
-    import sys
-    import os
-    
-    # Aseguramos que la carpeta backend esté en el path para que las importaciones internas (config, models, etc.) funcionen
-    base_dir = os.path.dirname(os.path.abspath(__file__))
-    backend_dir = os.path.join(base_dir, "backend")
-    
-    if backend_dir not in sys.path:
-        sys.path.insert(0, backend_dir)
-    
-    # Intentamos importar la app de FastAPI
     try:
-        from main import app
+        from backend.main import app
     except ImportError:
-        # Fallback por si la estructura cambia
-        try:
-            from backend.main import app
-        except ImportError as e:
-            print(f"Error critico: No se pudo encontrar 'app' en main.py o backend/main.py")
-            print(f"PYTHONPATH: {sys.path}")
-            raise e
+        # Fallback para diferentes estructuras de carpetas
+        import sys
+        sys.path.insert(0, os.path.join(os.path.dirname(__file__), "backend"))
+        from main import app

@@ -1426,6 +1426,7 @@ const Dashboard: React.FC = () => {
                       </div>
                     </div>
                   </motion.div>
+                )}
                 {settingsTab === 'stats' && (
                   <motion.div 
                     key="stats-tab"

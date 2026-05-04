@@ -1632,111 +1632,32 @@ async def stream_auth_logs(email: Optional[str] = None, current_user: models.Use
     return StreamingResponse(auth_log_generator(), media_type="text/event-stream")
 
 # Serve Frontend
-def sync_email_traffic(db: Session):
-    """
-    Parses Postfix/Dovecot logs to extract traffic statistics.
-    """
-    if os.name == 'nt':
-        return # Skip on Windows
-    
-    log_paths = ['/var/log/mail.log', '/var/log/mail.info', '/var/log/mail.log.1']
-    
-    # We'll use a set of (day, qid) to avoid double counting
-    sent_ids = set()
-    received_ids = set()
-    stats = {} # date -> {sent: 0, received: 0}
-    
-    try:
-        current_year = datetime.now().year
+if os.path.exists(STATIC_DIR):
+    app.mount("/assets", StaticFiles(directory=os.path.join(STATIC_DIR, "assets")), name="assets")
+
+    @app.get("/{full_path:path}")
+    async def serve_frontend(full_path: str):
+        # API requests that reach here are truly Not Found
+        if full_path.startswith("api/"):
+            raise HTTPException(status_code=404, detail="API endpoint not found")
         
-        for log_path in log_paths:
-            if not os.path.exists(log_path): continue
+        # 1. Try to serve exact file from static
+        file_path = os.path.join(STATIC_DIR, full_path)
+        if full_path and os.path.isfile(file_path):
+            return FileResponse(file_path)
             
-            # Read last 50k lines should be enough for a few days
-            try:
-                # Tail is more memory efficient for large logs
-                result = subprocess.run(['tail', '-n', '50000', log_path], capture_output=True, text=True)
-                lines = result.stdout.splitlines()
-            except:
-                with open(log_path, 'r', encoding='utf-8', errors='replace') as f:
-                    lines = f.readlines()[-50000:]
-
-            for line in lines:
-                match = re.match(r'^([A-Z][a-z]{2}\s+\d+)', line)
-                if not match: continue
-                
-                date_str = match.group(1)
-                try:
-                    dt = datetime.strptime(f"{date_str} {current_year}", "%b %d %Y")
-                    if dt > datetime.now(): dt = dt.replace(year=current_year - 1)
-                    day = dt.date()
-                    
-                    if day not in stats:
-                        stats[day] = {"sent": 0, "received": 0}
-                    
-                    # Sent criteria: Postfix SMTP delivery success
-                    if "postfix/smtp" in line and "status=sent" in line:
-                        qid_match = re.search(r'postfix/smtp\[\d+\]: ([A-Z0-9]+):', line)
-                        if qid_match:
-                            qid = qid_match.group(1)
-                            if (day, qid) not in sent_ids:
-                                stats[day]["sent"] += 1
-                                sent_ids.add((day, qid))
-                    
-                    # Received criteria: Postfix cleanup (internal queueing)
-                    # This captures incoming mail before delivery attempts
-                    elif "postfix/cleanup" in line and "message-id=" in line:
-                        qid_match = re.search(r'postfix/cleanup\[\d+\]: ([A-Z0-9]+):', line)
-                        if qid_match:
-                            qid = qid_match.group(1)
-                            if (day, qid) not in received_ids:
-                                stats[day]["received"] += 1
-                                received_ids.add((day, qid))
-                except: continue
-
-        # Update DB
-        for day, data in stats.items():
-            dt_day = datetime.combine(day, datetime.min.time())
-            traffic = db.query(models.EmailTraffic).filter(models.EmailTraffic.date == dt_day).first()
-            if not traffic:
-                traffic = models.EmailTraffic(date=dt_day, sent_count=data["sent"], received_count=data["received"])
-                db.add(traffic)
-            else:
-                # Logs are truth for current/recent days
-                traffic.sent_count = data["sent"]
-                traffic.received_count = data["received"]
+        # 2. Otherwise serve index.html (SPA logic)
+        index_path = os.path.join(STATIC_DIR, "index.html")
+        if os.path.exists(index_path):
+            return FileResponse(index_path)
         
-        db.commit()
-    except Exception as e:
-        print(f"Error in sync_email_traffic: {str(e)}")
+        raise HTTPException(status_code=404, detail="Frontend build (index.html) not found in static folder")
+else:
+    print(f"WARNING: STATIC_DIR not found at {STATIC_DIR}. Frontend will not be served.")
 
-# Traffic Statistics
-@app.get("/api/mail/traffic", response_model=schemas.TrafficStatsResponse)
-async def get_mail_traffic(
-    days: int = 30,
-    sync: bool = True,
-    db: Session = Depends(get_db),
-    current_user: models.User = Depends(auth.get_current_active_user)
-):
-    if sync:
-        sync_email_traffic(db)
-        
-    start_date = datetime.utcnow().replace(hour=0, minute=0, second=0, microsecond=0) - timedelta(days=days)
-    traffic = db.query(models.EmailTraffic).filter(
-        models.EmailTraffic.date >= start_date
-    ).order_by(models.EmailTraffic.date.asc()).all()
-    
-    # Convert to history list (format expected by frontend)
-    history = []
-    total_sent = 0
-    total_received = 0
-    peak_day_total = 0
-    
-    for t in traffic:
-        history.append({
-            "date": t.date.isoformat(),
-            "sent_count": t.sent_count,
-            "received_count": t.received_count,
+if __name__ == "__main__":
+    import uvicorn
+    uvicorn.run(app, host="0.0.0.0", port=8000)
             "total": t.sent_count + t.received_count
         })
         total_sent += t.sent_count

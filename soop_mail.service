@@ -1,16 +1,14 @@
 [Unit]
 Description=Gunicorn instance to serve soop MAIL (FastAPI)
-After=network.target mysql.service mariadb.service
-Wants=mysql.service mariadb.service
+After=network.target
 
 [Service]
 User=www-data
 Group=www-data
 WorkingDirectory=/var/www/soop_mail
-# Path completo para encontrar binarios y el venv
+# RESTAURA EL PATH COMPLETO PARA QUE ENCUENTRE POSTFIX Y OTROS COMANDOS
 Environment="PATH=/var/www/soop_mail/venv/bin:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin"
-Environment="PYTHONPATH=/var/www/soop_mail:/var/www/soop_mail/backend"
-Environment="APP_ENV=prod"
+Environment="PYTHONPATH=/var/www/soop_mail"
 
 ExecStart=/var/www/soop_mail/venv/bin/python -m gunicorn \
     --workers 3 \

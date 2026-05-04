@@ -20,29 +20,21 @@ function AppRoutes() {
     <Routes>
       <Route path="/login" element={<LoginPage />} />
 
-      <Route 
-        path="/usuarios" 
+      <Route
+        path="/usuarios"
         element={
           <ProtectedRoute>
             <Dashboard />
           </ProtectedRoute>
-        } 
+        }
       />
-      <Route 
-        path="/configuracion" 
+      <Route
+        path="/configuracion"
         element={
           <ProtectedRoute>
             <Dashboard />
           </ProtectedRoute>
-        } 
-      />
-      <Route 
-        path="/estadisticas" 
-        element={
-          <ProtectedRoute>
-            <Dashboard />
-          </ProtectedRoute>
-        } 
+        }
       />
       <Route path="/" element={<Navigate to="/usuarios" replace />} />
       <Route path="*" element={<Navigate to="/usuarios" replace />} />

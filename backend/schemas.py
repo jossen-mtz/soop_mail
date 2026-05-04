@@ -207,21 +207,6 @@ class SystemStatus(BaseModel):
     status: str
     service_active: bool
     details: dict
-
-class EmailTrafficBase(BaseModel):
-    date: datetime
-    sent_count: int
-    received_count: int
-
-class EmailTrafficOut(EmailTrafficBase):
-    id: int
-    
-    class Config:
-        from_attributes = True
-
-class TrafficHistory(BaseModel):
-    date: str
-    sent_count: int
     received_count: int
     total: int
 

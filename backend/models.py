@@ -66,13 +66,3 @@ class AutoResponder(Base):
     end_date = Column(DateTime, nullable=True)
     created_at = Column(DateTime, default=datetime.utcnow, nullable=False)
     updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow, nullable=False)
-
-class EmailTraffic(Base):
-    __tablename__ = 'email_traffic'
-    
-    id = Column(Integer, primary_key=True, index=True)
-    date = Column(DateTime, nullable=False, index=True, unique=True)
-    sent_count = Column(Integer, default=0, nullable=False)
-    received_count = Column(Integer, default=0, nullable=False)
-    created_at = Column(DateTime, default=datetime.utcnow, nullable=False)
-    updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow, nullable=False)
