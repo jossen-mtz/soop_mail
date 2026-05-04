@@ -29,8 +29,6 @@ import {
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { 
-  BarChart, 
-  Bar, 
   AreaChart, 
   Area, 
   XAxis, 
@@ -40,7 +38,7 @@ import {
   ResponsiveContainer, 
   Legend 
 } from 'recharts';
-import { subDays, format } from 'date-fns';
+import { format } from 'date-fns';
 
 interface MailUser {
   email: string;
