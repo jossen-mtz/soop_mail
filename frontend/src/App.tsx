@@ -36,6 +36,14 @@ function AppRoutes() {
           </ProtectedRoute>
         }
       />
+      <Route
+        path="/estadisticas"
+        element={
+          <ProtectedRoute>
+            <Dashboard />
+          </ProtectedRoute>
+        }
+      />
       <Route path="/" element={<Navigate to="/usuarios" replace />} />
       <Route path="*" element={<Navigate to="/usuarios" replace />} />
     </Routes>

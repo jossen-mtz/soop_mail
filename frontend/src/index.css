@@ -254,50 +254,88 @@ tr:hover td {
   max-width: 1000px;
 }
 
-/* Media Queries */
+/* Dashboard Layout System */
+.dashboard-layout {
+  display: flex;
+  min-height: 100vh;
+  width: 100%;
+}
+
+.sidebar {
+  width: 280px;
+  background: white;
+  border-right: 1px solid var(--border);
+  display: flex;
+  flex-direction: column;
+  padding: 2rem 1.5rem;
+  transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+  position: sticky;
+  top: 0;
+  height: 100vh;
+  z-index: 1000;
+}
+
+.mobile-top-bar {
+  display: none !important;
+}
+
+.mobile-close-btn {
+  display: none !important;
+}
+
+.main-content {
+  flex: 1;
+  padding: 2.5rem;
+  overflow-x: hidden;
+  background-color: var(--background);
+}
+
 @media (max-width: 1024px) {
   .sidebar {
-    width: 80px !important;
-  }
-
-  .sidebar span {
-    display: none;
-  }
-
-  .sidebar-logo-text {
-    display: none;
+    width: 240px;
+    padding: 1.5rem 1rem;
   }
 }
 
 @media (max-width: 768px) {
-  #root {
+  .dashboard-layout {
     flex-direction: column;
   }
 
-  .sidebar {
-    width: 100% !important;
-    height: auto !important;
-    flex-direction: row !important;
-    padding: 0.5rem !important;
+  .mobile-top-bar {
+    display: flex !important;
+    background: white;
+    border-bottom: 1px solid var(--border);
+    padding: 0.75rem 1.25rem;
+    align-items: center;
+    gap: 1rem;
     position: sticky;
     top: 0;
-    z-index: 100;
-    justify-content: space-around;
+    z-index: 900;
   }
 
-  .sidebar nav {
-    flex-direction: row !important;
-    width: 100%;
-    justify-content: space-around;
+  .mobile-close-btn {
+    display: flex !important;
   }
 
-  .sidebar-item {
-    padding: 0.75rem !important;
-    margin: 0 !important;
+  .sidebar {
+    position: fixed;
+    left: -100%;
+    top: 0;
+    bottom: 0;
+    width: 280px !important;
+    height: 100vh !important;
+    z-index: 1001;
+    box-shadow: var(--shadow-lg);
+    background: white;
+  }
+
+  .sidebar.open {
+    left: 0;
   }
 
   .main-content {
-    padding: 1rem !important;
+    padding: 1.5rem;
   }
 
   .grid-2-cols {

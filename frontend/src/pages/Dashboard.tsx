@@ -36,7 +36,8 @@ import {
   CartesianGrid, 
   Tooltip, 
   ResponsiveContainer, 
-  Legend 
+  Legend,
+  Treemap
 } from 'recharts';
 import { format } from 'date-fns';
 
@@ -50,6 +51,18 @@ interface MailUser {
   storage_size: string;
   status: string;
 }
+
+const CustomTreemapTooltip = ({ active, payload }: any) => {
+  if (active && payload && payload.length) {
+    return (
+      <div style={{ background: '#ffffff', padding: '0.75rem', borderRadius: '0.5rem', boxShadow: '0 4px 6px -1px rgba(0, 0, 0, 0.1)', border: '1px solid #e2e8f0' }}>
+        <p style={{ fontWeight: '700', marginBottom: '0.25rem', color: '#1e293b' }}>{payload[0].payload.name}</p>
+        <p style={{ fontSize: '0.875rem', color: '#64748b' }}>Total Correos: <span style={{ color: '#4f46e5', fontWeight: '700' }}>{payload[0].value.toLocaleString()}</span></p>
+      </div>
+    );
+  }
+  return null;
+};
 
 const Dashboard: React.FC = () => {
   const { user, logout } = useAuth();
@@ -118,7 +131,7 @@ const Dashboard: React.FC = () => {
   const [actionLoading, setActionLoading] = useState(false);
   const [notification, setNotification] = useState<{message: string, type: 'success' | 'error'} | null>(null);
   
-  const [settingsTab, setSettingsTab] = useState<'profile' | 'stats' | 'server' | 'logs' | 'mail-logs' | 'routing' | 'auth-console'>('profile');
+  const [settingsTab, setSettingsTab] = useState<'profile' | 'server' | 'logs' | 'mail-logs' | 'routing' | 'auth-console'>('profile');
   const [isGroupMode] = useState(false);
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
   const [authConsoleLogs, setAuthConsoleLogs] = useState<string[]>([]);
@@ -460,7 +473,7 @@ const Dashboard: React.FC = () => {
       } else if (settingsTab === 'mail-logs') {
         fetchMailLogs();
       } else if (settingsTab === 'server') {
-        fetchTrafficStats(trafficPeriod);
+        // No stats needed here anymore
       }
     } else if (activeTab === 'stats') {
       fetchTrafficStats(trafficPeriod);
@@ -621,34 +634,10 @@ const Dashboard: React.FC = () => {
   return (
     <div className="dashboard-layout">
       {/* Top Bar for Mobile */}
-      <div 
-        className="mobile-top-bar"
-        style={{
-          alignItems: 'center',
-          gap: '1rem',
-          padding: '1rem',
-          background: 'white',
-          borderBottom: '1px solid #e2e8f0',
-          position: 'sticky',
-          top: 0,
-          zIndex: 800,
-          width: '100%'
-        }}
-      >
+      <div className="mobile-top-bar">
         <button 
           className="hamburger-btn"
           onClick={() => setIsSidebarOpen(true)}
-          style={{
-            background: 'white',
-            border: '1px solid #e2e8f0',
-            padding: '0.5rem',
-            borderRadius: '0.75rem',
-            color: '#4f46e5',
-            cursor: 'pointer',
-            boxShadow: '0 1px 2px 0 rgba(0, 0, 0, 0.05)',
-            alignItems: 'center',
-            justifyContent: 'center'
-          }}
         >
           <Menu size={20} />
         </button>
@@ -689,7 +678,7 @@ const Dashboard: React.FC = () => {
       </AnimatePresence>
 
       <aside className={`sidebar ${isSidebarOpen ? 'open' : ''}`}>
-        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '2.5rem', padding: '0.5rem' }}>
+        <div className="sidebar-header" style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '2.5rem' }}>
           <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem' }}>
             <div style={{ 
               background: '#4f46e5', 
@@ -712,10 +701,7 @@ const Dashboard: React.FC = () => {
               background: 'transparent', 
               border: 'none', 
               color: '#64748b',
-              cursor: 'pointer',
-              display: 'flex',
-              alignItems: 'center',
-              justifyContent: 'center'
+              cursor: 'pointer'
             }}
           >
             <X size={24} />
@@ -1047,6 +1033,96 @@ const Dashboard: React.FC = () => {
               </div>
             </div>
 
+            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(400px, 1fr))', gap: '1.5rem', marginBottom: '2.5rem' }}>
+              {/* Heatmap Section */}
+              <div className="card" style={{ padding: '2rem', background: '#ffffff', boxShadow: '0 4px 6px -1px rgba(0, 0, 0, 0.1)' }}>
+                <div style={{ marginBottom: '1.5rem' }}>
+                  <h3 style={{ fontSize: '1.125rem', fontWeight: '700', color: '#1e293b' }}>Densidad de Mensajes (Top 15)</h3>
+                  <p style={{ fontSize: '0.813rem', color: '#64748b' }}>Distribución relativa del volumen de correos por cuenta.</p>
+                </div>
+                <div style={{ height: '300px', width: '100%' }}>
+                  {mailUsers.filter(u => u.email_count > 0).length > 0 ? (
+                    <ResponsiveContainer width="100%" height="100%">
+                      <Treemap
+                        data={mailUsers
+                          .filter(u => u.email_count > 0)
+                          .sort((a, b) => b.email_count - a.email_count)
+                          .slice(0, 15)
+                          .map(u => ({
+                            name: u.email.split('@')[0],
+                            fullName: u.email,
+                            value: u.email_count
+                          }))
+                        }
+                        dataKey="value"
+                        aspectRatio={4 / 3}
+                        stroke="#fff"
+                        fill="#4f46e5"
+                      >
+                        <Tooltip content={<CustomTreemapTooltip />} />
+                      </Treemap>
+                    </ResponsiveContainer>
+                  ) : (
+                    <div style={{ height: '100%', display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#64748b', fontSize: '0.875rem', background: '#f8fafc', borderRadius: '0.5rem' }}>
+                      No hay datos de buzones disponibles
+                    </div>
+                  )}
+                </div>
+              </div>
+
+              {/* Intensity Map Grid */}
+              <div className="card" style={{ padding: '2rem', background: '#ffffff', boxShadow: '0 4px 6px -1px rgba(0, 0, 0, 0.1)' }}>
+                <div style={{ marginBottom: '1.5rem' }}>
+                  <h3 style={{ fontSize: '1.125rem', fontWeight: '700', color: '#1e293b' }}>Mapa de Actividad por Cuenta</h3>
+                  <p style={{ fontSize: '0.813rem', color: '#64748b' }}>Intensidad de almacenamiento en todos los buzones.</p>
+                </div>
+                <div style={{ 
+                  display: 'grid', 
+                  gridTemplateColumns: 'repeat(auto-fill, minmax(12px, 1fr))', 
+                  gap: '4px',
+                  maxHeight: '300px',
+                  overflowY: 'auto',
+                  paddingRight: '0.5rem'
+                }}>
+                  {mailUsers
+                    .sort((a, b) => b.email_count - a.email_count)
+                    .map((u, i) => {
+                      const maxCount = Math.max(...mailUsers.map(user => user.email_count), 1);
+                      const ratio = u.email_count / maxCount;
+                      let color = '#f1f5f9'; // vacio
+                      if (u.email_count > 0) {
+                        if (ratio < 0.1) color = '#e0e7ff';
+                        else if (ratio < 0.3) color = '#c7d2fe';
+                        else if (ratio < 0.6) color = '#818cf8';
+                        else if (ratio < 0.8) color = '#4f46e5';
+                        else color = '#312e81';
+                      }
+                      return (
+                        <div 
+                          key={i}
+                          title={`${u.email}: ${u.email_count} correos`}
+                          style={{ 
+                            aspectRatio: '1/1', 
+                            background: color, 
+                            borderRadius: '2px',
+                            cursor: 'help'
+                          }}
+                        />
+                      );
+                    })}
+                </div>
+                <div style={{ marginTop: '1.5rem', display: 'flex', alignItems: 'center', gap: '0.5rem', fontSize: '0.75rem', color: '#64748b' }}>
+                  <span>Menos</span>
+                  <div style={{ display: 'flex', gap: '2px' }}>
+                    {['#f1f5f9', '#e0e7ff', '#c7d2fe', '#818cf8', '#4f46e5', '#312e81'].map(c => (
+                      <div key={c} style={{ width: '10px', height: '10px', background: c, borderRadius: '1px' }} />
+                    ))}
+                  </div>
+                  <span>Más</span>
+                </div>
+              </div>
+            </div>
+
             <div className="card" style={{ padding: '2rem', marginBottom: '2.5rem' }}>
               <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '2rem' }}>
                 <h3 style={{ fontSize: '1.125rem', fontWeight: '700', color: '#1e293b' }}>Histórico de Tráfico</h3>
@@ -1193,24 +1269,7 @@ const Dashboard: React.FC = () => {
               >
                 Mi Perfil
               </button>
-              <button 
-                onClick={() => setSettingsTab('stats')}
-                style={{ 
-                  padding: '1rem 1.5rem', 
-                  borderBottom: settingsTab === 'stats' ? '2px solid #4f46e5' : '2px solid transparent',
-                  color: settingsTab === 'stats' ? '#4f46e5' : '#64748b',
-                  fontWeight: '600',
-                  fontSize: '0.875rem',
-                  background: 'none',
-                  borderTop: 'none',
-                  borderLeft: 'none',
-                  borderRight: 'none',
-                  cursor: 'pointer',
-                  whiteSpace: 'nowrap'
-                }}
-              >
-                Estadísticas
-              </button>
+
               <button 
                 onClick={() => setSettingsTab('server')}
                 style={{ 
@@ -1425,176 +1484,7 @@ const Dashboard: React.FC = () => {
                     </div>
                   </motion.div>
                 )}
-                {settingsTab === 'stats' && (
-                  <motion.div 
-                    key="stats-tab"
-                    initial={{ opacity: 0, x: 20 }}
-                    animate={{ opacity: 1, x: 0 }}
-                    exit={{ opacity: 0, x: -20 }}
-                    style={{ display: 'grid', gap: '2rem' }}
-                  >
-                    <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))', gap: '1.5rem' }}>
-                      <div className="card" style={{ padding: '1.5rem', border: 'none', background: '#ffffff', boxShadow: '0 4px 6px -1px rgba(0, 0, 0, 0.1)' }}>
-                        <div style={{ display: 'flex', alignItems: 'center', gap: '1rem', marginBottom: '1rem' }}>
-                          <div style={{ background: '#eef2ff', width: '40px', height: '40px', borderRadius: '0.75rem', display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#4f46e5' }}>
-                            <Share2 size={20} />
-                          </div>
-                          <div style={{ fontSize: '0.875rem', color: '#64748b', fontWeight: '600' }}>TOTAL ENVIADOS</div>
-                        </div>
-                        <div style={{ fontSize: '1.875rem', fontWeight: '800', color: '#1e293b' }}>{trafficStats?.summary.total_sent.toLocaleString() || 0}</div>
-                        <div style={{ fontSize: '0.75rem', color: '#64748b', marginTop: '0.5rem' }}>
-                          Promedio diario: <span style={{ fontWeight: '700', color: '#4f46e5' }}>{trafficStats?.summary.avg_sent.toFixed(1) || 0}</span>
-                        </div>
-                      </div>
 
-                      <div className="card" style={{ padding: '1.5rem', border: 'none', background: '#ffffff', boxShadow: '0 4px 6px -1px rgba(0, 0, 0, 0.1)' }}>
-                        <div style={{ display: 'flex', alignItems: 'center', gap: '1rem', marginBottom: '1rem' }}>
-                          <div style={{ background: '#ecfdf5', width: '40px', height: '40px', borderRadius: '0.75rem', display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#10b981' }}>
-                            <Mail size={20} />
-                          </div>
-                          <div style={{ fontSize: '0.875rem', color: '#64748b', fontWeight: '600' }}>TOTAL RECIBIDOS</div>
-                        </div>
-                        <div style={{ fontSize: '1.875rem', fontWeight: '800', color: '#1e293b' }}>{trafficStats?.summary.total_received.toLocaleString() || 0}</div>
-                        <div style={{ fontSize: '0.75rem', color: '#64748b', marginTop: '0.5rem' }}>
-                          Promedio diario: <span style={{ fontWeight: '700', color: '#10b981' }}>{trafficStats?.summary.avg_received.toFixed(1) || 0}</span>
-                        </div>
-                      </div>
-
-                      <div className="card" style={{ padding: '1.5rem', border: 'none', background: '#ffffff', boxShadow: '0 4px 6px -1px rgba(0, 0, 0, 0.1)' }}>
-                        <div style={{ display: 'flex', alignItems: 'center', gap: '1rem', marginBottom: '1rem' }}>
-                          <div style={{ background: '#fff7ed', width: '40px', height: '40px', borderRadius: '0.75rem', display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#f97316' }}>
-                            <Activity size={20} />
-                          </div>
-                          <div style={{ fontSize: '0.875rem', color: '#64748b', fontWeight: '600' }}>PICO DE TRÁFICO</div>
-                        </div>
-                        <div style={{ fontSize: '1.875rem', fontWeight: '800', color: '#1e293b' }}>{trafficStats?.summary.peak_day_total.toLocaleString() || 0}</div>
-                        <div style={{ fontSize: '0.75rem', color: '#64748b', marginTop: '0.5rem' }}>
-                          Máximo en un día
-                        </div>
-                      </div>
-                    </div>
-
-                    <div className="card" style={{ padding: '2rem' }}>
-                      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '2rem' }}>
-                        <div>
-                          <h3 style={{ fontSize: '1.125rem', fontWeight: '700', color: '#1e293b' }}>Actividad de Correo</h3>
-                          <p style={{ color: '#64748b', fontSize: '0.813rem' }}>Histórico de los últimos {trafficPeriod} días</p>
-                        </div>
-                        <div style={{ display: 'flex', gap: '0.5rem' }}>
-                          {[7, 30, 90].map(d => (
-                            <button 
-                              key={d} 
-                              onClick={() => setTrafficPeriod(d)} 
-                              style={{ 
-                                padding: '0.4rem 0.875rem', 
-                                fontSize: '0.75rem', 
-                                borderRadius: '0.5rem', 
-                                background: trafficPeriod === d ? '#4f46e5' : '#f1f5f9', 
-                                color: trafficPeriod === d ? '#fff' : '#64748b', 
-                                border: 'none',
-                                fontWeight: '600',
-                                cursor: 'pointer'
-                              }}
-                            >
-                              {d}d
-                            </button>
-                          ))}
-                        </div>
-                      </div>
-                      
-                      {trafficStats ? (
-                        <div style={{ height: '350px', width: '100%' }}>
-                          <ResponsiveContainer width="100%" height="100%">
-                            <AreaChart data={trafficStats.history}>
-                              <defs>
-                                <linearGradient id="colorSentTab" x1="0" y1="0" x2="0" y2="1">
-                                  <stop offset="5%" stopColor="#4f46e5" stopOpacity={0.3}/>
-                                  <stop offset="95%" stopColor="#4f46e5" stopOpacity={0}/>
-                                </linearGradient>
-                                <linearGradient id="colorReceivedTab" x1="0" y1="0" x2="0" y2="1">
-                                  <stop offset="5%" stopColor="#10b981" stopOpacity={0.3}/>
-                                  <stop offset="95%" stopColor="#10b981" stopOpacity={0}/>
-                                </linearGradient>
-                              </defs>
-                              <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#f1f5f9" />
-                              <XAxis 
-                                dataKey="date" 
-                                tick={{ fontSize: 12, fill: '#94a3b8' }} 
-                                axisLine={false}
-                                tickLine={false}
-                                tickFormatter={(str) => format(new Date(str), 'dd MMM')}
-                              />
-                              <YAxis 
-                                tick={{ fontSize: 12, fill: '#94a3b8' }} 
-                                axisLine={false}
-                                tickLine={false}
-                              />
-                              <Tooltip 
-                                contentStyle={{ 
-                                  background: '#ffffff', 
-                                  border: 'none', 
-                                  borderRadius: '0.75rem', 
-                                  boxShadow: '0 10px 15px -3px rgba(0, 0, 0, 0.1)'
-                                }}
-                                labelFormatter={(label) => format(new Date(label), 'EEEE, dd MMMM yyyy')}
-                              />
-                              <Area 
-                                type="monotone" 
-                                dataKey="sent_count" 
-                                name="Enviados"
-                                stroke="#4f46e5" 
-                                strokeWidth={3}
-                                fillOpacity={1} 
-                                fill="url(#colorSentTab)" 
-                              />
-                              <Area 
-                                type="monotone" 
-                                dataKey="received_count" 
-                                name="Recibidos"
-                                stroke="#10b981" 
-                                strokeWidth={3}
-                                fillOpacity={1} 
-                                fill="url(#colorReceivedTab)" 
-                              />
-                            </AreaChart>
-                          </ResponsiveContainer>
-                        </div>
-                      ) : (
-                        <div style={{ height: '350px', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-                          <div className="animate-spin" style={{ width: '30px', height: '30px', border: '3px solid #f3f3f3', borderTop: '3px solid #4f46e5', borderRadius: '50%' }}></div>
-                        </div>
-                      )}
-                    </div>
-
-                    <div className="card" style={{ padding: '0', overflow: 'hidden' }}>
-                      <div style={{ padding: '1.25rem 1.5rem', borderBottom: '1px solid #f1f5f9' }}>
-                        <h3 style={{ fontSize: '1rem', fontWeight: '700', color: '#1e293b' }}>Registro Diario</h3>
-                      </div>
-                      <div className="table-container">
-                        <table>
-                          <thead>
-                            <tr>
-                              <th>Fecha</th>
-                              <th>Enviados</th>
-                              <th>Recibidos</th>
-                              <th>Total</th>
-                            </tr>
-                          </thead>
-                          <tbody>
-                            {trafficStats?.history.slice().reverse().map((day: any) => (
-                              <tr key={day.date}>
-                                <td style={{ fontWeight: '600' }}>{format(new Date(day.date), 'dd/MM/yyyy')}</td>
-                                <td style={{ color: '#4f46e5', fontWeight: '700' }}>{day.sent_count}</td>
-                                <td style={{ color: '#10b981', fontWeight: '700' }}>{day.received_count}</td>
-                                <td style={{ fontWeight: '800' }}>{day.total}</td>
-                              </tr>
-                            ))}
-                          </tbody>
-                        </table>
-                      </div>
-                    </div>
-                  </motion.div>
-                )}
                 {settingsTab === 'server' && (
                   <motion.div 
                     key="server"
@@ -1835,13 +1725,7 @@ const Dashboard: React.FC = () => {
                       </div>
                     </div>
 
-                    {/* Email Traffic Notification */}
-                    <div className="card" style={{ padding: '2rem', textAlign: 'center', color: '#64748b' }}>
-                      <p>Las estadísticas detalladas ahora están disponibles en la pestaña dedicada <strong>Estadísticas</strong> en el menú lateral.</p>
-                      <NavLink to="/estadisticas" className="btn btn-primary" style={{ marginTop: '1rem', display: 'inline-flex' }}>
-                        Ir a Estadísticas
-                      </NavLink>
-                    </div>
+
                   </motion.div>
                 )}
 
