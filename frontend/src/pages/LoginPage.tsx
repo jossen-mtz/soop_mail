@@ -50,9 +50,9 @@ const LoginPage: React.FC = () => {
         animate={{ opacity: 1, y: 0 }}
         className="glass-card" 
         style={{ 
-          width: '100%', 
+          width: '90%', 
           maxWidth: '420px', 
-          padding: '3rem',
+          padding: window.innerWidth < 480 ? '1.5rem' : '3rem',
           background: 'rgba(255, 255, 255, 0.9)',
           boxShadow: '0 25px 50px -12px rgba(0, 0, 0, 0.08)'
         }}
@@ -71,7 +71,7 @@ const LoginPage: React.FC = () => {
           }}>
             <ShieldCheck size={36} />
           </div>
-          <h1 style={{ fontSize: '2rem', fontWeight: '800', marginBottom: '0.5rem', color: '#1e293b' }}>sarsoop labs</h1>
+          <h1 style={{ fontSize: '2rem', fontWeight: '800', marginBottom: '0.5rem', color: '#1e293b' }}>Soop Mails</h1>
           <p style={{ color: '#64748b', fontSize: '0.925rem' }}>Gestión de Correo Empresarial</p>
         </div>
 
@@ -174,7 +174,7 @@ const LoginPage: React.FC = () => {
 
         <div style={{ marginTop: '2.5rem', textAlign: 'center' }}>
           <div style={{ fontSize: '0.813rem', color: '#94a3b8' }}>
-            &copy; 2026 sarsoop labs. Todos los derechos reservados.
+            &copy; 2026 Soop Mails. Todos los derechos reservados.
           </div>
         </div>
       </motion.div>

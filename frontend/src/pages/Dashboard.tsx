@@ -24,8 +24,23 @@ import {
   Save,
   FileText,
   AlertTriangle,
+  Menu,
+  X
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
+import { 
+  BarChart, 
+  Bar, 
+  AreaChart, 
+  Area, 
+  XAxis, 
+  YAxis, 
+  CartesianGrid, 
+  Tooltip, 
+  ResponsiveContainer, 
+  Legend 
+} from 'recharts';
+import { subDays, format } from 'date-fns';
 
 interface MailUser {
   email: string;
@@ -104,7 +119,8 @@ const Dashboard: React.FC = () => {
   const [actionLoading, setActionLoading] = useState(false);
   const [notification, setNotification] = useState<{message: string, type: 'success' | 'error'} | null>(null);
   
-  const [settingsTab, setSettingsTab] = useState<'profile' | 'server' | 'logs' | 'mail-logs' | 'aliases' | 'forwards' | 'bcc' | 'auth-console'>('profile');
+  const [settingsTab, setSettingsTab] = useState<'profile' | 'server' | 'logs' | 'mail-logs' | 'routing' | 'auth-console'>('profile');
+  const [isGroupMode] = useState(false);
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
   const [authConsoleLogs, setAuthConsoleLogs] = useState<string[]>([]);
   const [isStreamingAuth, setIsStreamingAuth] = useState(false);
@@ -122,6 +138,10 @@ const Dashboard: React.FC = () => {
     confirm_password: ''
   });
   const [showSettingsPassword, setShowSettingsPassword] = useState(false);
+
+  const [isSidebarOpen, setIsSidebarOpen] = useState(false);
+  const [trafficStats, setTrafficStats] = useState<any>(null);
+  const [trafficPeriod, setTrafficPeriod] = useState(30);
 
   const [deleteConfig, setDeleteConfig] = useState<{
     title: string;
@@ -220,6 +240,15 @@ const Dashboard: React.FC = () => {
       showNotification('Error al cargar usuarios', 'error');
     } finally {
       setLoading(false);
+    }
+  };
+
+  const fetchTrafficStats = async (days = 30) => {
+    try {
+      const response = await api.get(`/api/mail/traffic?days=${days}`);
+      setTrafficStats(response.data);
+    } catch (err) {
+      console.error('Error fetching traffic stats:', err);
     }
   };
 
@@ -419,15 +448,23 @@ const Dashboard: React.FC = () => {
   };
 
   useEffect(() => {
-    if (activeTab === 'settings') {
-      if (settingsTab === 'logs') fetchAuditLogs();
-      if (settingsTab === 'server') fetchSystemStatus();
-      if (settingsTab === 'mail-logs') fetchMailLogs();
-      if (settingsTab === 'aliases') fetchMailAliases();
-      if (settingsTab === 'forwards') fetchForwards();
-      if (settingsTab === 'bcc') fetchBCCRules();
+    if (activeTab === 'users') {
+      fetchMailUsers();
+    } else if (activeTab === 'settings') {
+      fetchSystemStatus();
+      if (settingsTab === 'routing') {
+        fetchMailAliases();
+        fetchBCCRules();
+        fetchForwards();
+      } else if (settingsTab === 'logs') {
+        fetchAuditLogs();
+      } else if (settingsTab === 'mail-logs') {
+        fetchMailLogs();
+      } else if (settingsTab === 'server') {
+        fetchTrafficStats(trafficPeriod);
+      }
     }
-  }, [settingsTab, activeTab]);
+  }, [activeTab, settingsTab, trafficPeriod]);
 
   useEffect(() => {
     fetchMailUsers();
@@ -581,37 +618,64 @@ const Dashboard: React.FC = () => {
   const totalNewEmails = mailUsers.reduce((acc, curr) => acc + (curr.new_emails || 0), 0);
 
   return (
-    <div className="dashboard-layout" style={{ display: 'flex', minHeight: '100vh', backgroundColor: '#f1f5f9' }}>
-      <aside className="sidebar" style={{ 
-        width: '280px', 
-        background: '#ffffff', 
-        borderRight: '1px solid #e2e8f0',
-        display: 'flex',
-        flexDirection: 'column',
-        padding: '1.5rem',
-        position: 'sticky',
-        top: 0,
-        height: '100vh'
-      }}>
-        <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem', marginBottom: '2.5rem', padding: '0.5rem' }}>
-          <div style={{ 
-            background: '#4f46e5', 
-            width: '42px',
-            height: '42px',
-            display: 'flex',
-            alignItems: 'center',
-            justifyContent: 'center',
-            borderRadius: '0.75rem', 
-            boxShadow: '0 8px 16px -4px rgba(79, 70, 229, 0.4)' 
-          }}>
-            <Mail color="white" size={22} />
+    <div className="dashboard-layout" style={{ display: 'flex', minHeight: '100vh', backgroundColor: '#f1f5f9', width: '100%' }}>
+      {/* Overlay for mobile */}
+      <AnimatePresence>
+        {isSidebarOpen && (
+          <motion.div 
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
+            onClick={() => setIsSidebarOpen(false)}
+            className="sidebar-overlay"
+            style={{
+              position: 'fixed',
+              inset: 0,
+              background: 'rgba(15, 23, 42, 0.4)',
+              backdropFilter: 'blur(4px)',
+              zIndex: 900,
+              display: 'none' // Controlled by CSS media queries
+            }}
+          />
+        )}
+      </AnimatePresence>
+
+      <aside className={`sidebar ${isSidebarOpen ? 'open' : ''}`}>
+        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '2.5rem', padding: '0.5rem' }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem' }}>
+            <div style={{ 
+              background: '#4f46e5', 
+              width: '42px',
+              height: '42px',
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'center',
+              borderRadius: '0.75rem', 
+              boxShadow: '0 8px 16px -4px rgba(79, 70, 229, 0.4)' 
+            }}>
+              <Mail color="white" size={22} />
+            </div>
+            <h2 className="sidebar-logo-text" style={{ fontSize: '1.25rem', fontWeight: '800', color: '#1e293b', letterSpacing: '-0.025em' }}>Soop Mails</h2>
           </div>
-          <h2 style={{ fontSize: '1.25rem', fontWeight: '800', color: '#1e293b', letterSpacing: '-0.025em' }}>sarsoop labs</h2>
+          <button 
+            className="mobile-close-btn"
+            onClick={() => setIsSidebarOpen(false)}
+            style={{ 
+              display: 'none', 
+              background: 'transparent', 
+              border: 'none', 
+              color: '#64748b',
+              cursor: 'pointer'
+            }}
+          >
+            <X size={24} />
+          </button>
         </div>
 
         <nav style={{ flex: 1 }}>
           <NavLink 
             to="/usuarios"
+            onClick={() => setIsSidebarOpen(false)}
             style={({ isActive }) => ({ 
               display: 'flex', 
               alignItems: 'center', 
@@ -633,6 +697,7 @@ const Dashboard: React.FC = () => {
           </NavLink>
           <NavLink 
             to="/configuracion"
+            onClick={() => setIsSidebarOpen(false)}
             style={({ isActive }) => ({ 
               display: 'flex', 
               alignItems: 'center', 
@@ -682,13 +747,31 @@ const Dashboard: React.FC = () => {
         </div>
       </aside>
 
-      <main style={{ flex: 1, padding: '2.5rem', overflowY: 'auto' }}>
+        <main className="main-content">
         {activeTab === 'users' ? (
           <div style={{ width: '100%' }}>
-            <header style={{ marginBottom: '2.5rem', display: 'flex', justifyContent: 'space-between', alignItems: 'flex-end' }}>
-              <div>
-                <h1 style={{ fontSize: '1.875rem', fontWeight: '800', color: '#1e293b', marginBottom: '0.25rem' }}>Buzones de Correo</h1>
-                <p style={{ color: '#64748b', fontSize: '0.938rem' }}>Gestión de cuentas y monitoreo de tráfico.</p>
+            <header style={{ marginBottom: '2.5rem', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: '1rem' }}>
+                <button 
+                  className="hamburger-btn"
+                  onClick={() => setIsSidebarOpen(true)}
+                  style={{
+                    display: 'none',
+                    background: 'white',
+                    border: '1px solid #e2e8f0',
+                    padding: '0.5rem',
+                    borderRadius: '0.75rem',
+                    color: '#4f46e5',
+                    cursor: 'pointer',
+                    boxShadow: '0 1px 2px 0 rgba(0, 0, 0, 0.05)'
+                  }}
+                >
+                  <Menu size={24} />
+                </button>
+                <div>
+                  <h1 style={{ fontSize: '1.875rem', fontWeight: '800', color: '#1e293b', marginBottom: '0.25rem' }}>Buzones de Correo</h1>
+                  <p style={{ color: '#64748b', fontSize: '0.938rem' }}>Gestión de cuentas y monitoreo de tráfico.</p>
+                </div>
               </div>
               <button onClick={() => setShowAddModal(true)} className="btn btn-primary" style={{ padding: '0.75rem 1.5rem', borderRadius: '0.875rem' }}>
                 <Plus size={20} />
@@ -747,7 +830,7 @@ const Dashboard: React.FC = () => {
                 </button>
               </div>
 
-              <div style={{ overflowX: 'auto' }}>
+              <div className="table-container">
                 <table>
                   <thead>
                     <tr>
@@ -862,9 +945,27 @@ const Dashboard: React.FC = () => {
           </div>
         ) : (
           <div style={{ width: '100%' }}>
-            <header style={{ marginBottom: '2.5rem' }}>
-              <h1 style={{ fontSize: '1.875rem', fontWeight: '800', color: '#1e293b', marginBottom: '0.25rem' }}>Configuración</h1>
-              <p style={{ color: '#64748b', fontSize: '0.938rem' }}>Administra el sistema y revisa el estado del servidor.</p>
+            <header style={{ marginBottom: '2.5rem', display: 'flex', alignItems: 'center', gap: '1rem' }}>
+              <button 
+                className="hamburger-btn"
+                onClick={() => setIsSidebarOpen(true)}
+                style={{
+                  display: 'none',
+                  background: 'white',
+                  border: '1px solid #e2e8f0',
+                  padding: '0.5rem',
+                  borderRadius: '0.75rem',
+                  color: '#4f46e5',
+                  cursor: 'pointer',
+                  boxShadow: '0 1px 2px 0 rgba(0, 0, 0, 0.05)'
+                }}
+              >
+                <Menu size={24} />
+              </button>
+              <div>
+                <h1 style={{ fontSize: '1.875rem', fontWeight: '800', color: '#1e293b', marginBottom: '0.25rem' }}>Configuración</h1>
+                <p style={{ color: '#64748b', fontSize: '0.938rem' }}>Administra el sistema y revisa el estado del servidor.</p>
+              </div>
             </header>
 
             <div style={{ display: 'flex', borderBottom: '1px solid #e2e8f0', marginBottom: '2rem', overflowX: 'auto' }}>
@@ -905,11 +1006,11 @@ const Dashboard: React.FC = () => {
                 Servidor
               </button>
               <button 
-                onClick={() => setSettingsTab('aliases')}
+                onClick={() => setSettingsTab('routing')}
                 style={{ 
                   padding: '1rem 1.5rem', 
-                  borderBottom: settingsTab === 'aliases' ? '2px solid #4f46e5' : '2px solid transparent',
-                  color: settingsTab === 'aliases' ? '#4f46e5' : '#64748b',
+                  borderBottom: settingsTab === 'routing' ? '2px solid #4f46e5' : '2px solid transparent',
+                  color: settingsTab === 'routing' ? '#4f46e5' : '#64748b',
                   fontWeight: '600',
                   fontSize: '0.875rem',
                   background: 'none',
@@ -920,43 +1021,7 @@ const Dashboard: React.FC = () => {
                   whiteSpace: 'nowrap'
                 }}
               >
-                Alias y Listas
-              </button>
-              <button 
-                onClick={() => setSettingsTab('forwards')}
-                style={{ 
-                  padding: '1rem 1.5rem', 
-                  borderBottom: settingsTab === 'forwards' ? '2px solid #4f46e5' : '2px solid transparent',
-                  color: settingsTab === 'forwards' ? '#4f46e5' : '#64748b',
-                  fontWeight: '600',
-                  fontSize: '0.875rem',
-                  background: 'none',
-                  borderTop: 'none',
-                  borderLeft: 'none',
-                  borderRight: 'none',
-                  cursor: 'pointer',
-                  whiteSpace: 'nowrap'
-                }}
-              >
-                Reenvíos
-              </button>
-              <button 
-                onClick={() => setSettingsTab('bcc')}
-                style={{ 
-                  padding: '1rem 1.5rem', 
-                  borderBottom: settingsTab === 'bcc' ? '2px solid #4f46e5' : '2px solid transparent',
-                  color: settingsTab === 'bcc' ? '#4f46e5' : '#64748b',
-                  fontWeight: '600',
-                  fontSize: '0.875rem',
-                  background: 'none',
-                  borderTop: 'none',
-                  borderLeft: 'none',
-                  borderRight: 'none',
-                  cursor: 'pointer',
-                  whiteSpace: 'nowrap'
-                }}
-              >
-                Copias (BCC)
+                Redirecciones y Copias
               </button>
               <button 
                 onClick={() => setSettingsTab('logs')}
@@ -1030,7 +1095,7 @@ const Dashboard: React.FC = () => {
                       <p style={{ color: '#64748b', fontSize: '0.875rem' }}>Administra tu información personal y configuración de acceso.</p>
                     </div>
                     
-                    <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '2.5rem' }}>
+                    <div className="grid-2-cols" style={{ display: 'grid', gap: '2.5rem' }}>
                       <div style={{ borderRight: '1px solid #f1f5f9', paddingRight: '2.5rem' }}>
                         <h4 style={{ fontSize: '1rem', fontWeight: '700', color: '#1e293b', marginBottom: '1.5rem', display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
                           <Users size={18} style={{ color: '#4f46e5' }} />
@@ -1372,13 +1437,131 @@ const Dashboard: React.FC = () => {
                               </div>
                             </div>
                           ))}
-                          {systemStatus?.details?.dovecot_config_error && (
-                            <div style={{ marginTop: '0.5rem', padding: '0.75rem', background: '#fff1f2', borderRadius: '0.5rem', border: '1px solid #ffe4e6', color: '#e11d48', fontSize: '0.75rem' }}>
-                              <strong>Error de Dovecot:</strong> {systemStatus.details.dovecot_config_error}
-                            </div>
                           )}
                         </div>
                       </div>
+                    </div>
+
+                    {/* Email Traffic Visualization */}
+                    <div className="card" style={{ padding: '1.5rem' }}>
+                      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1.5rem' }}>
+                        <div>
+                          <h4 style={{ fontSize: '1rem', fontWeight: '700', color: '#1e293b', display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+                            <Activity size={18} style={{ color: '#4f46e5' }} />
+                            Estadísticas de Tráfico de Correo
+                          </h4>
+                          <p style={{ color: '#64748b', fontSize: '0.75rem' }}>Enviados vs Recibidos en los últimos {trafficPeriod} días</p>
+                        </div>
+                        <div style={{ display: 'flex', gap: '0.5rem' }}>
+                          {[7, 14, 30, 90].map(days => (
+                            <button
+                              key={days}
+                              onClick={() => setTrafficPeriod(days)}
+                              style={{
+                                padding: '0.4rem 0.75rem',
+                                fontSize: '0.75rem',
+                                borderRadius: '0.5rem',
+                                background: trafficPeriod === days ? '#eef2ff' : 'transparent',
+                                color: trafficPeriod === days ? '#4f46e5' : '#64748b',
+                                border: trafficPeriod === days ? '1px solid #4f46e5' : '1px solid #e2e8f0',
+                                fontWeight: trafficPeriod === days ? '600' : '400',
+                                cursor: 'pointer'
+                              }}
+                            >
+                              {days}d
+                            </button>
+                          ))}
+                        </div>
+                      </div>
+
+                      {trafficStats ? (
+                        <>
+                          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(180px, 1fr))', gap: '1rem', marginBottom: '2rem' }}>
+                            <div style={{ padding: '1rem', background: '#f8fafc', borderRadius: '0.75rem', border: '1px solid #f1f5f9' }}>
+                              <div style={{ fontSize: '0.7rem', color: '#64748b', fontWeight: '600', textTransform: 'uppercase', marginBottom: '0.25rem' }}>Total Enviados</div>
+                              <div style={{ fontSize: '1.25rem', fontWeight: '800', color: '#1e293b' }}>{trafficStats.summary.total_sent}</div>
+                            </div>
+                            <div style={{ padding: '1rem', background: '#f8fafc', borderRadius: '0.75rem', border: '1px solid #f1f5f9' }}>
+                              <div style={{ fontSize: '0.7rem', color: '#64748b', fontWeight: '600', textTransform: 'uppercase', marginBottom: '0.25rem' }}>Total Recibidos</div>
+                              <div style={{ fontSize: '1.25rem', fontWeight: '800', color: '#1e293b' }}>{trafficStats.summary.total_received}</div>
+                            </div>
+                            <div style={{ padding: '1rem', background: '#f8fafc', borderRadius: '0.75rem', border: '1px solid #f1f5f9' }}>
+                              <div style={{ fontSize: '0.7rem', color: '#64748b', fontWeight: '600', textTransform: 'uppercase', marginBottom: '0.25rem' }}>Promedio Diario</div>
+                              <div style={{ fontSize: '1.25rem', fontWeight: '800', color: '#1e293b' }}>{(trafficStats.summary.avg_sent + trafficStats.summary.avg_received).toFixed(1)}</div>
+                            </div>
+                            <div style={{ padding: '1rem', background: '#f8fafc', borderRadius: '0.75rem', border: '1px solid #f1f5f9' }}>
+                              <div style={{ fontSize: '0.7rem', color: '#64748b', fontWeight: '600', textTransform: 'uppercase', marginBottom: '0.25rem' }}>Día Pico</div>
+                              <div style={{ fontSize: '1.25rem', fontWeight: '800', color: '#1e293b' }}>{trafficStats.summary.peak_day_total}</div>
+                            </div>
+                          </div>
+
+                          <div style={{ width: '100%', height: '350px' }}>
+                            <ResponsiveContainer width="100%" height="100%">
+                              <AreaChart
+                                data={trafficStats.history}
+                                margin={{ top: 10, right: 10, left: 0, bottom: 0 }}
+                              >
+                                <defs>
+                                  <linearGradient id="colorSent" x1="0" y1="0" x2="0" y2="1">
+                                    <stop offset="5%" stopColor="#6366f1" stopOpacity={0.1}/>
+                                    <stop offset="95%" stopColor="#6366f1" stopOpacity={0}/>
+                                  </linearGradient>
+                                  <linearGradient id="colorReceived" x1="0" y1="0" x2="0" y2="1">
+                                    <stop offset="5%" stopColor="#10b981" stopOpacity={0.1}/>
+                                    <stop offset="95%" stopColor="#10b981" stopOpacity={0}/>
+                                  </linearGradient>
+                                </defs>
+                                <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#f1f5f9" />
+                                <XAxis 
+                                  dataKey="date" 
+                                  tick={{ fontSize: 10, fill: '#94a3b8' }} 
+                                  axisLine={false}
+                                  tickLine={false}
+                                  tickFormatter={(str) => format(new Date(str), 'dd MMM')}
+                                />
+                                <YAxis 
+                                  tick={{ fontSize: 10, fill: '#94a3b8' }} 
+                                  axisLine={false}
+                                  tickLine={false}
+                                />
+                                <Tooltip 
+                                  contentStyle={{ 
+                                    background: '#ffffff', 
+                                    border: '1px solid #e2e8f0', 
+                                    borderRadius: '0.75rem', 
+                                    boxShadow: '0 4px 6px -1px rgb(0 0 0 / 0.1)',
+                                    fontSize: '12px'
+                                  }}
+                                  labelFormatter={(label) => format(new Date(label), 'EEEE, dd MMMM yyyy')}
+                                />
+                                <Legend verticalAlign="top" height={36} iconType="circle" />
+                                <Area 
+                                  type="monotone" 
+                                  dataKey="sent_count" 
+                                  name="Enviados"
+                                  stroke="#6366f1" 
+                                  strokeWidth={2}
+                                  fillOpacity={1} 
+                                  fill="url(#colorSent)" 
+                                />
+                                <Area 
+                                  type="monotone" 
+                                  dataKey="received_count" 
+                                  name="Recibidos"
+                                  stroke="#10b981" 
+                                  strokeWidth={2}
+                                  fillOpacity={1} 
+                                  fill="url(#colorReceived)" 
+                                />
+                              </AreaChart>
+                            </ResponsiveContainer>
+                          </div>
+                        </>
+                      ) : (
+                        <div style={{ height: '300px', display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#94a3b8' }}>
+                          Cargando datos de tráfico...
+                        </div>
+                      )}
                     </div>
                   </motion.div>
                 )}
@@ -1520,16 +1703,16 @@ const Dashboard: React.FC = () => {
                   </motion.div>
                 )}
 
-                 {settingsTab === 'forwards' && (
+                {settingsTab === 'routing' && (
                   <motion.div 
-                    key="forwards"
+                    key="routing"
                     initial={{ opacity: 0, x: 20 }}
                     animate={{ opacity: 1, x: 0 }}
                     exit={{ opacity: 0, x: -20 }}
-                    className="card" 
-                    style={{ padding: '2rem' }}
+                    style={{ display: 'grid', gap: '2rem' }}
                   >
-                    <div>
+                    {/* Reenvíos Section */}
+                    <div className="card" style={{ padding: '2rem' }}>
                       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1.5rem' }}>
                         <div>
                           <h3 style={{ fontSize: '1rem', fontWeight: '700', color: '#1e293b' }}>Reenvíos</h3>
@@ -1541,7 +1724,7 @@ const Dashboard: React.FC = () => {
                         </button>
                       </div>
                       <div className="table-container">
-                        <table className="table">
+                        <table>
                           <thead>
                             <tr>
                               <th>Dirección Origen</th>
@@ -1567,11 +1750,7 @@ const Dashboard: React.FC = () => {
                                   </span>
                                 </td>
                                 <td style={{ textAlign: 'right' }}>
-                                  <button 
-                                    className="btn-icon" 
-                                    style={{ color: '#ef4444' }}
-                                    onClick={() => handleDeleteForward(f.source)}
-                                  >
+                                  <button className="btn-icon" style={{ color: '#ef4444' }} onClick={() => handleDeleteForward(f.source)}>
                                     <Trash2 size={16} />
                                   </button>
                                 </td>
@@ -1588,19 +1767,9 @@ const Dashboard: React.FC = () => {
                         </table>
                       </div>
                     </div>
-                  </motion.div>
-                )}
 
-                {settingsTab === 'bcc' && (
-                  <motion.div 
-                    key="bcc"
-                    initial={{ opacity: 0, x: 20 }}
-                    animate={{ opacity: 1, x: 0 }}
-                    exit={{ opacity: 0, x: -20 }}
-                    className="card" 
-                    style={{ padding: '2rem' }}
-                  >
-                    <div>
+                    {/* Copias (BCC) Section */}
+                    <div className="card" style={{ padding: '2rem' }}>
                       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1.5rem' }}>
                         <div>
                           <h3 style={{ fontSize: '1rem', fontWeight: '700', color: '#1e293b' }}>Copias (BCC)</h3>
@@ -1630,7 +1799,7 @@ const Dashboard: React.FC = () => {
                       </div>
 
                       <div className="table-container">
-                        <table className="table">
+                        <table>
                           <thead>
                             <tr>
                               <th>{bccMode === 'sender' ? 'Emisor' : 'Receptor'}</th>
@@ -1644,11 +1813,7 @@ const Dashboard: React.FC = () => {
                                 <td style={{ fontWeight: '600' }}>{rule.email}</td>
                                 <td>{rule.target}</td>
                                 <td style={{ textAlign: 'right' }}>
-                                  <button 
-                                    className="btn-icon" 
-                                    style={{ color: '#ef4444' }}
-                                    onClick={() => handleDeleteBCCRule(rule.email, bccMode)}
-                                  >
+                                  <button className="btn-icon" style={{ color: '#ef4444' }} onClick={() => handleDeleteBCCRule(rule.email, bccMode)}>
                                     <Trash2 size={16} />
                                   </button>
                                 </td>
@@ -1665,19 +1830,9 @@ const Dashboard: React.FC = () => {
                         </table>
                       </div>
                     </div>
-                  </motion.div>
-                )}
 
-                {settingsTab === 'aliases' && (
-                  <motion.div 
-                    key="aliases"
-                    initial={{ opacity: 0, x: 20 }}
-                    animate={{ opacity: 1, x: 0 }}
-                    exit={{ opacity: 0, x: -20 }}
-                    className="card" 
-                    style={{ padding: '2rem' }}
-                  >
-                    <div>
+                    {/* Alias y Listas Section */}
+                    <div className="card" style={{ padding: '2rem' }}>
                       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1.5rem' }}>
                         <div>
                           <h3 style={{ fontSize: '1rem', fontWeight: '700', color: '#1e293b' }}>Alias y Listas</h3>
@@ -1689,7 +1844,7 @@ const Dashboard: React.FC = () => {
                         </button>
                       </div>
 
-                      <div style={{ overflowX: 'auto', border: '1px solid #f1f5f9', borderRadius: '1rem' }}>
+                      <div className="table-container">
                         <table>
                           <thead>
                             <tr>
@@ -1717,11 +1872,7 @@ const Dashboard: React.FC = () => {
                                   </div>
                                 </td>
                                 <td style={{ textAlign: 'right' }}>
-                                  <button 
-                                    onClick={() => handleDeleteAlias(alias.email)}
-                                    className="btn-icon"
-                                    style={{ color: '#ef4444' }}
-                                  >
+                                  <button onClick={() => handleDeleteAlias(alias.email)} className="btn-icon" style={{ color: '#ef4444' }}>
                                     <Trash2 size={18} />
                                   </button>
                                 </td>
@@ -1817,21 +1968,12 @@ const Dashboard: React.FC = () => {
       </AnimatePresence>
 
       {showAddModal && (
-        <div style={{ 
-          position: 'fixed', 
-          inset: 0, 
-          background: 'rgba(15, 23, 42, 0.4)', 
-          backdropFilter: 'blur(8px)',
-          display: 'flex', 
-          alignItems: 'center', 
-          justifyContent: 'center',
-          zIndex: 100
-        }}>
+        <div className="modal-overlay">
           <motion.div 
-            initial={{ scale: 0.9, opacity: 0, y: 20 }}
-            animate={{ scale: 1, opacity: 1, y: 0 }}
-            className="card" 
-            style={{ width: '100%', maxWidth: '480px', padding: '2.5rem', border: 'none', boxShadow: '0 25px 50px -12px rgba(0, 0, 0, 0.25)' }}
+            initial={{ opacity: 0, y: 20 }}
+            animate={{ opacity: 1, y: 0 }}
+            className="modal-content"
+            style={{ maxWidth: '480px', padding: '2rem' }}
           >
             <h2 style={{ fontSize: '1.5rem', fontWeight: '800', marginBottom: '0.5rem', color: '#1e293b' }}>Nuevo Usuario</h2>
             <p style={{ color: '#64748b', fontSize: '0.875rem', marginBottom: '2rem' }}>Configura una nueva cuenta de correo electrónico.</p>
@@ -2028,7 +2170,7 @@ const Dashboard: React.FC = () => {
             {detailsTab === 'general' ? (
               <div style={{ display: 'flex', flexDirection: 'column', gap: '1.5rem' }}>
               <div className="input-group">
-                <label>Dirección de Correo</label>
+                <label>{isGroupMode ? 'Dirección del Grupo' : 'Dirección del Alias'}</label>
                 <div style={{ fontWeight: '700', color: '#1e293b', fontSize: '1.125rem', padding: '0.75rem 1rem', background: '#f8fafc', borderRadius: '0.75rem', border: '1px solid #e2e8f0' }}>
                   {selectedMailUser.email}
                 </div>
@@ -2315,8 +2457,8 @@ const Dashboard: React.FC = () => {
               <button 
                 type="button" 
                 onClick={deleteConfig.onConfirm} 
-                className="btn btn-primary"
-                style={{ width: '100%', background: '#ef4444', borderColor: '#ef4444' }}
+                className="btn btn-danger"
+                style={{ width: '100%' }}
                 disabled={actionLoading}
               >
                 {actionLoading ? 'Eliminando...' : 'Eliminar'}
@@ -2329,29 +2471,36 @@ const Dashboard: React.FC = () => {
 
       {/* Add Alias Modal */}
       {showAddAliasModal && (
-        <div style={{ 
-          position: 'fixed', 
-          inset: 0, 
-          background: 'rgba(15, 23, 42, 0.4)', 
-          backdropFilter: 'blur(8px)',
-          display: 'flex', 
-          alignItems: 'center', 
-          justifyContent: 'center',
-          zIndex: 100
-        }}>
+        <div className="modal-overlay">
           <motion.div 
-            initial={{ scale: 0.9, opacity: 0, y: 20 }}
-            animate={{ scale: 1, opacity: 1, y: 0 }}
-            className="card" 
-            style={{ width: '100%', maxWidth: '480px', padding: '2.5rem', border: 'none' }}
+            initial={{ opacity: 0, scale: 0.95 }}
+            animate={{ opacity: 1, scale: 1 }}
+            className="modal-content"
+            style={{ maxWidth: '600px', padding: '2rem' }}
           >
-            <h2 style={{ fontSize: '1.5rem', fontWeight: '800', marginBottom: '0.5rem', color: '#1e293b' }}>Nuevo Alias</h2>
-            <p style={{ color: '#64748b', fontSize: '0.875rem', marginBottom: '2rem' }}>Dirección virtual que redirige correos.</p>
+            <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem', marginBottom: '0.5rem' }}>
+              <div style={{ 
+                background: isGroupMode ? 'rgba(79, 70, 229, 0.1)' : 'rgba(99, 102, 241, 0.1)', 
+                padding: '0.75rem', 
+                borderRadius: '0.75rem', 
+                color: isGroupMode ? '#4f46e5' : '#6366f1' 
+              }}>
+                {isGroupMode ? <Users size={24} /> : <Share2 size={24} />}
+              </div>
+              <div>
+                <h2 style={{ fontSize: '1.5rem', fontWeight: '800', color: '#1e293b' }}>
+                  {isGroupMode ? 'Nuevo Grupo de Distribución' : 'Nuevo Alias de Correo'}
+                </h2>
+                <p style={{ color: '#64748b', fontSize: '0.875rem' }}>
+                  {isGroupMode ? 'Crea una dirección que envíe correos a varios miembros.' : 'Crea una dirección virtual que redirija a otro buzón.'}
+                </p>
+              </div>
+            </div>
             
             <form onSubmit={handleCreateAlias}>
               <div className="input-group" style={{ position: 'relative' }}>
                 <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '0.5rem' }}>
-                  <label style={{ marginBottom: 0 }}>Email Virtual</label>
+                  <label style={{ marginBottom: 0 }}>{isGroupMode ? 'Dirección del Grupo' : 'Dirección del Alias'}</label>
                   <button 
                     type="button" 
                     onClick={() => setShowAliasList(!showAliasList)}
@@ -2474,7 +2623,7 @@ const Dashboard: React.FC = () => {
               </div>
               <div className="input-group" style={{ marginBottom: '1.5rem' }}>
                 <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '0.5rem' }}>
-                  <label style={{ marginBottom: 0 }}>Destinatarios (separados por coma)</label>
+                  <label style={{ marginBottom: 0 }}>{isGroupMode ? 'Miembros del Grupo' : 'Destinatarios (separados por coma)'}</label>
                   <button 
                     type="button" 
                     onClick={() => setShowRecipientList(!showRecipientList)}
@@ -2578,21 +2727,12 @@ const Dashboard: React.FC = () => {
 
       {/* Add BCC Rule Modal */}
       {showAddForwardingModal && (
-        <div style={{ 
-          position: 'fixed', 
-          inset: 0, 
-          background: 'rgba(15, 23, 42, 0.4)', 
-          backdropFilter: 'blur(8px)',
-          display: 'flex', 
-          alignItems: 'center', 
-          justifyContent: 'center',
-          zIndex: 100
-        }}>
+        <div className="modal-overlay">
           <motion.div 
-            initial={{ scale: 0.9, opacity: 0, y: 20 }}
-            animate={{ scale: 1, opacity: 1, y: 0 }}
-            className="card" 
-            style={{ width: '100%', maxWidth: '480px', padding: '2.5rem', border: 'none' }}
+            initial={{ opacity: 0, y: 20 }}
+            animate={{ opacity: 1, y: 0 }}
+            className="modal-content"
+            style={{ maxWidth: '480px', padding: '2rem' }}
           >
             <h2 style={{ fontSize: '1.5rem', fontWeight: '800', marginBottom: '0.5rem', color: '#1e293b' }}>Nueva Copia BCC</h2>
             <p style={{ color: '#64748b', fontSize: '0.875rem', marginBottom: '2rem' }}>Enviar copia oculta automática de correos (enviados o recibidos).</p>
@@ -2702,37 +2842,81 @@ const Dashboard: React.FC = () => {
 
       {/* Add Forward Modal (Virtual) */}
       {showAddForwardModal && (
-        <div style={{ 
-          position: 'fixed', 
-          inset: 0, 
-          background: 'rgba(15, 23, 42, 0.4)', 
-          backdropFilter: 'blur(8px)',
-          display: 'flex', 
-          alignItems: 'center', 
-          justifyContent: 'center',
-          zIndex: 100
-        }}>
+        <div className="modal-overlay">
           <motion.div 
-            initial={{ scale: 0.9, opacity: 0, y: 20 }}
-            animate={{ scale: 1, opacity: 1, y: 0 }}
-            className="card" 
-            style={{ width: '100%', maxWidth: '480px', padding: '2.5rem', border: 'none' }}
+            initial={{ opacity: 0, y: 20 }}
+            animate={{ opacity: 1, y: 0 }}
+            className="modal-content"
+            style={{ maxWidth: '600px', padding: '2rem' }}
           >
             <h2 style={{ fontSize: '1.5rem', fontWeight: '800', marginBottom: '0.5rem', color: '#1e293b' }}>Nuevo Reenvío</h2>
             <p style={{ color: '#64748b', fontSize: '0.875rem', marginBottom: '2rem' }}>Redirigir correos entrantes a otros destinos.</p>
             
             <form onSubmit={handleCreateForward}>
-              <div className="input-group">
+              <div className="input-group" style={{ position: 'relative' }}>
                 <label>Dirección Origen</label>
                 <input 
                   type="text" 
                   className="input-control" 
                   placeholder={`ventas@${DEFAULT_DOMAIN}`}
                   value={newForward.source}
-                  onChange={e => setNewForward({...newForward, source: e.target.value})}
-                  onBlur={() => setNewForward({...newForward, source: ensureDomain(newForward.source)})}
+                  onChange={e => {
+                    setNewForward({...newForward, source: e.target.value});
+                    setActiveSuggestionField('forward-source');
+                  }}
+                  onBlur={() => {
+                    setNewForward({...newForward, source: ensureDomain(newForward.source)});
+                    setTimeout(() => setActiveSuggestionField(null), 200);
+                  }}
+                  onFocus={() => setActiveSuggestionField('forward-source')}
                   required
                 />
+                
+                {activeSuggestionField === 'forward-source' && (
+                  <div className="card" style={{ 
+                    position: 'absolute', 
+                    top: '100%', 
+                    left: 0, 
+                    right: 0, 
+                    zIndex: 1000, 
+                    marginTop: '0.25rem',
+                    maxHeight: '200px',
+                    overflowY: 'auto',
+                    padding: '0.5rem',
+                    boxShadow: '0 10px 15px -3px rgba(0, 0, 0, 0.1)'
+                  }}>
+                    {mailUsers
+                      .filter(u => u.email.toLowerCase().includes(newForward.source.toLowerCase()) || newForward.source === '')
+                      .map(u => (
+                        <div 
+                          key={u.email}
+                          onClick={() => setNewForward({...newForward, source: u.email})}
+                          style={{ 
+                            padding: '0.75rem', 
+                            cursor: 'pointer', 
+                            borderRadius: '0.5rem',
+                            fontSize: '0.875rem',
+                            display: 'flex',
+                            alignItems: 'center',
+                            gap: '0.5rem',
+                            transition: 'background 0.2s'
+                          }}
+                          onMouseOver={e => (e.currentTarget.style.background = '#f1f5f9')}
+                          onMouseOut={e => (e.currentTarget.style.background = 'transparent')}
+                        >
+                          <Users size={14} style={{ color: '#64748b' }} />
+                          {u.email}
+                        </div>
+                      ))
+                    }
+                    {mailUsers.filter(u => u.email.toLowerCase().includes(newForward.source.toLowerCase())).length === 0 && (
+                      <div style={{ padding: '0.75rem', fontSize: '0.875rem', color: '#94a3b8', textAlign: 'center' }}>
+                        Sin coincidencias
+                      </div>
+                    )}
+                  </div>
+                )}
+
                 <p style={{ fontSize: '0.7rem', color: '#94a3b8', marginTop: '0.25rem' }}>
                   Puede ser un buzón existente o una dirección virtual nueva.
                 </p>

@@ -1,6 +1,6 @@
-# Plataforma Web de Gestión de Usuarios soop MAIL
+# Soop Mails
 
-Aplicación web moderna para gestionar usuarios de correo electrónico en servidores soop MAIL con sistema de autenticación completo.
+Aplicación web moderna para gestionar usuarios de correo electrónico en servidores Soop Mails con sistema de autenticación completo.
 
 ## Características
 
@@ -10,7 +10,7 @@ Aplicación web moderna para gestionar usuarios de correo electrónico en servid
 - ✅ **Editar usuarios**: Cambiar contraseñas de usuarios existentes
 - ✅ **Eliminar usuarios**: Eliminar usuarios con opción de eliminar directorio de correo
 - ✅ **Listar usuarios**: Ver todos los usuarios configurados
-- ✅ **Reiniciar soop MAIL**: Reiniciar el servicio soop MAIL desde la interfaz
+- ✅ **Reiniciar Soop Mails**: Reiniciar el servicio Soop Mails desde la interfaz
 - ✅ **Auditoría**: Registro de todas las acciones realizadas
 - ✅ **Pool de Conexiones MySQL**: Gestión eficiente de conexiones a base de datos
 - ✅ **Interfaz moderna**: Diseño responsive y fácil de usar
@@ -19,7 +19,7 @@ Aplicación web moderna para gestionar usuarios de correo electrónico en servid
 
 - Python 3.7 o superior
 - MySQL 5.7+ o MariaDB 10.2+
-- Servicio soop MAIL instalado y configurado
+- Servicio Soop Mails instalado y configurado
 - Permisos de root o sudo para modificar `/etc/soop_mail/users`
 - Herramientas de soop MAIL disponibles en el PATH (`soop-mailtools`)
 
@@ -122,11 +122,11 @@ Puedes configurar la aplicación mediante variables de entorno o editando `confi
 - `MYSQL_PASSWORD`: Contraseña de MySQL
 - `MYSQL_DATABASE`: Nombre de la base de datos (default: `soop_mail_admin`)
 
-**soop MAIL:**
-- `SOOP_MAIL_USERS_FILE`: Ruta al archivo de usuarios de soop MAIL (default: `/etc/soop_mail/users`)
+**Soop Mails:**
+- `SOOP_MAIL_USERS_FILE`: Ruta al archivo de usuarios de Soop Mails (default: `/etc/soop_mail/users`)
 - `SOOP_MAIL_BASE`: Directorio base para correos (default: `/var/mail/soop_mail`)
-- `SOOP_MAIL_VMAIL_UID`: UID del usuario soop MAIL (default: `5000`)
-- `SOOP_MAIL_VMAIL_GID`: GID del grupo soop MAIL (default: `5000`)
+- `SOOP_MAIL_VMAIL_UID`: UID del usuario Soop Mails (default: `5000`)
+- `SOOP_MAIL_VMAIL_GID`: GID del grupo Soop Mails (default: `5000`)
 
 **Seguridad:**
 - `SECRET_KEY`: Clave secreta para sesiones (¡cambiar en producción!)

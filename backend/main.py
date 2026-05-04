@@ -323,72 +323,63 @@ def get_mailbox_stats(mail_dir: str):
     if not mail_dir:
         return 0, 0, 0, ""
         
-    # Extraer dominio y usuario de la ruta original para buscar en bases alternativas
+    # Extraer dominio y usuario
     parts = mail_dir.strip('/').split('/')
     domain = parts[-2] if len(parts) >= 2 else DEFAULT_DOMAIN
     username = parts[-1] if len(parts) >= 1 else ""
+    email = f"{username}@{domain}" if username and domain else ""
     
-    # Bases donde buscaremos para sumar todo
-    MAILBOX_BASES = ["/var/mail/vhosts", "/var/mail/soop_mail"]
-    
+    # Bases donde buscaremos
+    MAILBOX_BASES = ["/var/mail/vhosts", "/var/mail/soop_mail", "/var/mail", "/var/vmail"]
+    if os.path.dirname(os.path.dirname(mail_dir)) not in MAILBOX_BASES:
+        MAILBOX_BASES.append(os.path.dirname(os.path.dirname(mail_dir)))
+
     total = 0
     new = 0
     size_bytes = 0
     resolved_paths = []
 
-    for base in MAILBOX_BASES:
-        mailbox_path = os.path.join(base, domain, username)
-        if not os.path.exists(mailbox_path):
-            continue
+    for base in set(MAILBOX_BASES):
+        if not base or base == "/": continue
+        
+        # Probar diferentes combinaciones de carpetas
+        candidates = [
+            os.path.join(base, domain, username), # dominio/usuario
+            os.path.join(base, email),           # usuario@dominio
+            os.path.join(base, username),        # usuario
+            mail_dir                             # ruta original
+        ]
+        
+        for mailbox_path in candidates:
+            if not mailbox_path or not os.path.exists(mailbox_path) or mailbox_path in resolved_paths:
+                continue
             
-        resolved_paths.append(mailbox_path)
-        try:
-            for root, dirs, files in os.walk(mailbox_path):
-                folder_name = os.path.basename(root)
-                # Solo contar en carpetas cur y new (estándar Maildir)
-                if folder_name in ("cur", "new"):
-                    is_new_dir = folder_name == "new"
-                    for file in files:
-                        # Ignorar archivos de índice/control de dovecot
-                        if file.startswith("dovecot"):
-                            continue
-                            
-                        total += 1
-                        if is_new_dir:
-                            new += 1
-                            
-                        try:
-                            fp = os.path.join(root, file)
-                            if not os.path.islink(fp):
-                                size_bytes += os.path.getsize(fp)
-                        except:
-                            pass
-        except Exception as e:
-            print(f"DEBUG: Error al leer {mailbox_path}: {str(e)}")
-            
-    # Si no se encontró en ninguna base estándar, usamos la ruta original del archivo
-    if not resolved_paths and os.path.exists(mail_dir):
-        resolved_paths.append(mail_dir)
-        try:
-            for root, dirs, files in os.walk(mail_dir):
-                folder_name = os.path.basename(root)
-                if folder_name in ("cur", "new"):
-                    is_new_dir = folder_name == "new"
-                    for file in files:
-                        if file.startswith("dovecot"):
-                            continue
-                        total += 1
-                        if is_new_dir: new += 1
-                        try:
-                            fp = os.path.join(root, file)
-                            if not os.path.islink(fp):
-                                size_bytes += os.path.getsize(fp)
-                        except: pass
-        except: pass
+            # Verificar si parece un Maildir (tiene cur, new o tmp)
+            is_maildir = any(os.path.exists(os.path.join(mailbox_path, d)) for d in ("cur", "new", "tmp"))
+            if not is_maildir:
+                continue
 
+            resolved_paths.append(mailbox_path)
+            try:
+                for root, dirs, files in os.walk(mailbox_path):
+                    folder_name = os.path.basename(root)
+                    if folder_name in ("cur", "new"):
+                        is_new_dir = folder_name == "new"
+                        for file in files:
+                            if file.startswith("dovecot"): continue
+                            total += 1
+                            if is_new_dir: new += 1
+                            try:
+                                fp = os.path.join(root, file)
+                                if not os.path.islink(fp):
+                                    size_bytes += os.path.getsize(fp)
+                            except: pass
+            except Exception as e:
+                print(f"DEBUG: Error al leer {mailbox_path}: {str(e)}")
+            
     # Mostrar de dónde vienen los datos en el log
     if resolved_paths:
-        print(f"DEBUG: User {username}@{domain} -> {total} emails found in {resolved_paths}")
+        print(f"DEBUG: User {email} -> {total} emails found in {resolved_paths}")
     
     return total, new, size_bytes, resolved_paths[0] if resolved_paths else mail_dir
 
@@ -926,7 +917,7 @@ async def create_mail_user(
     
     if user_data.restart_soop_mail:
         try:
-            subprocess.run(['systemctl', 'restart', 'soop-mail'], check=True)
+            subprocess.run(['systemctl', 'restart', 'soop_mail'], check=True)
         except:
             pass # Ignore if not available
             
@@ -1244,7 +1235,7 @@ async def update_mail_user_password(
     
     if user_data.restart_soop_mail:
         try:
-            subprocess.run(['systemctl', 'restart', 'soop-mail'], check=True)
+            subprocess.run(['systemctl', 'restart', 'soop_mail'], check=True)
         except:
             pass
             
@@ -1286,7 +1277,7 @@ async def get_system_status(current_user: models.User = Depends(auth.get_current
     try:
         if os.name != 'nt':
             # Main soop-mail service
-            result = subprocess.run(['systemctl', 'is-active', 'soop-mail'], capture_output=True, text=True)
+            result = subprocess.run(['systemctl', 'is-active', 'soop_mail'], capture_output=True, text=True)
             active_out = result.stdout.strip()
             print(f"DEBUG: soop-mail service status: '{active_out}' (code: {result.returncode})")
             service_active = active_out == 'active'
@@ -1641,6 +1632,85 @@ async def stream_auth_logs(email: Optional[str] = None, current_user: models.Use
     return StreamingResponse(auth_log_generator(), media_type="text/event-stream")
 
 # Serve Frontend
+# Traffic Statistics
+@app.get("/api/mail/traffic", response_model=schemas.TrafficStatsResponse)
+async def get_mail_traffic(
+    days: int = 30,
+    db: Session = Depends(get_db),
+    current_user: models.User = Depends(auth.get_current_active_user)
+):
+    start_date = datetime.utcnow() - timedelta(days=days)
+    traffic = db.query(models.EmailTraffic).filter(
+        models.EmailTraffic.date >= start_date
+    ).order_by(models.EmailTraffic.date.asc()).all()
+    
+    total_sent = sum(t.sent_count for t in traffic)
+    total_received = sum(t.received_count for t in traffic)
+    
+    return {
+        "daily": traffic,
+        "summary": {
+            "total_sent": total_sent,
+            "total_received": total_received,
+            "days_analyzed": days,
+            "average_sent": total_sent / days if days > 0 else 0,
+            "average_received": total_received / days if days > 0 else 0
+        }
+    }
+
+@app.post("/api/mail/traffic/track")
+async def track_mail_traffic(
+    direction: str, # "sent" or "received"
+    count: int = 1,
+    db: Session = Depends(get_db),
+    # In a real scenario, this would be called by a local hook/milter with a secret key
+    # For now, we'll allow it if authorized for demo purposes, 
+    # but ideally it should be internal-only.
+):
+    if direction not in ("sent", "received"):
+        raise HTTPException(status_code=400, detail="Invalid direction")
+        
+    today = datetime.utcnow().replace(hour=0, minute=0, second=0, microsecond=0)
+    
+    traffic = db.query(models.EmailTraffic).filter(models.EmailTraffic.date == today).first()
+    if not traffic:
+        traffic = models.EmailTraffic(date=today)
+        db.add(traffic)
+        
+    if direction == "sent":
+        traffic.sent_count += count
+    else:
+        traffic.received_count += count
+        
+    db.commit()
+    return {"status": "success", "date": today, "direction": direction, "new_total": traffic.sent_count if direction == "sent" else traffic.received_count}
+
+@app.post("/api/system/traffic/populate-mock")
+async def populate_mock_traffic(
+    days: int = 30,
+    db: Session = Depends(get_db),
+    current_user: models.User = Depends(auth.get_current_active_user)
+):
+    """Utility to populate mock data for visualization testing."""
+    import random
+    
+    for i in range(days):
+        date = datetime.utcnow().replace(hour=0, minute=0, second=0, microsecond=0) - timedelta(days=i)
+        traffic = db.query(models.EmailTraffic).filter(models.EmailTraffic.date == date).first()
+        if not traffic:
+            traffic = models.EmailTraffic(
+                date=date,
+                sent_count=random.randint(10, 150),
+                received_count=random.randint(20, 250)
+            )
+            db.add(traffic)
+        else:
+            traffic.sent_count = random.randint(10, 150)
+            traffic.received_count = random.randint(20, 250)
+            
+    db.commit()
+    return {"message": f"Populated {days} days of mock traffic data"}
+
 if os.path.exists(STATIC_DIR):
     app.mount("/assets", StaticFiles(directory=os.path.join(STATIC_DIR, "assets")), name="assets")
 
