@@ -251,6 +251,13 @@ tr:hover td {
   max-width: 1000px;
 }
 
+.dashboard-layout {
+  display: flex;
+  min-height: 100vh;
+  background-color: #f1f5f9;
+  width: 100%;
+}
+
 .sidebar {
   width: 280px;
   background-color: var(--surface);
@@ -292,6 +299,9 @@ tr:hover td {
   #root {
     flex-direction: column;
   }
+  .dashboard-layout {
+    flex-direction: column;
+  }
 
   .sidebar {
     position: fixed !important;
@@ -314,6 +324,10 @@ tr:hover td {
 
   .sidebar-overlay {
     display: block !important;
+  }
+
+  .mobile-top-bar {
+    display: flex !important;
   }
 
   .hamburger-btn {

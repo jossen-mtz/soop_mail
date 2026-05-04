@@ -618,7 +618,57 @@ const Dashboard: React.FC = () => {
   const totalNewEmails = mailUsers.reduce((acc, curr) => acc + (curr.new_emails || 0), 0);
 
   return (
-    <div className="dashboard-layout" style={{ display: 'flex', minHeight: '100vh', backgroundColor: '#f1f5f9', width: '100%' }}>
+    <div className="dashboard-layout">
+      {/* Top Bar for Mobile */}
+      <div 
+        className="mobile-top-bar"
+        style={{
+          display: 'none',
+          alignItems: 'center',
+          gap: '1rem',
+          padding: '1rem',
+          background: 'white',
+          borderBottom: '1px solid #e2e8f0',
+          position: 'sticky',
+          top: 0,
+          zIndex: 800,
+          width: '100%'
+        }}
+      >
+        <button 
+          className="hamburger-btn"
+          onClick={() => setIsSidebarOpen(true)}
+          style={{
+            background: 'white',
+            border: '1px solid #e2e8f0',
+            padding: '0.5rem',
+            borderRadius: '0.75rem',
+            color: '#4f46e5',
+            cursor: 'pointer',
+            boxShadow: '0 1px 2px 0 rgba(0, 0, 0, 0.05)',
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center'
+          }}
+        >
+          <Menu size={20} />
+        </button>
+        <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+          <div style={{ 
+            width: '32px', 
+            height: '32px', 
+            background: 'linear-gradient(135deg, #4f46e5 0%, #6366f1 100%)',
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+            borderRadius: '0.5rem'
+          }}>
+            <Mail color="white" size={16} />
+          </div>
+          <span style={{ fontWeight: '800', color: '#1e293b', fontSize: '1rem' }}>Soop Mails</span>
+        </div>
+      </div>
+
       {/* Overlay for mobile */}
       <AnimatePresence>
         {isSidebarOpen && (
@@ -633,8 +683,7 @@ const Dashboard: React.FC = () => {
               inset: 0,
               background: 'rgba(15, 23, 42, 0.4)',
               backdropFilter: 'blur(4px)',
-              zIndex: 900,
-              display: 'none' // Controlled by CSS media queries
+              zIndex: 900
             }}
           />
         )}
@@ -661,11 +710,13 @@ const Dashboard: React.FC = () => {
             className="mobile-close-btn"
             onClick={() => setIsSidebarOpen(false)}
             style={{ 
-              display: 'none', 
               background: 'transparent', 
               border: 'none', 
               color: '#64748b',
-              cursor: 'pointer'
+              cursor: 'pointer',
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'center'
             }}
           >
             <X size={24} />
@@ -752,22 +803,6 @@ const Dashboard: React.FC = () => {
           <div style={{ width: '100%' }}>
             <header style={{ marginBottom: '2.5rem', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
               <div style={{ display: 'flex', alignItems: 'center', gap: '1rem' }}>
-                <button 
-                  className="hamburger-btn"
-                  onClick={() => setIsSidebarOpen(true)}
-                  style={{
-                    display: 'none',
-                    background: 'white',
-                    border: '1px solid #e2e8f0',
-                    padding: '0.5rem',
-                    borderRadius: '0.75rem',
-                    color: '#4f46e5',
-                    cursor: 'pointer',
-                    boxShadow: '0 1px 2px 0 rgba(0, 0, 0, 0.05)'
-                  }}
-                >
-                  <Menu size={24} />
-                </button>
                 <div>
                   <h1 style={{ fontSize: '1.875rem', fontWeight: '800', color: '#1e293b', marginBottom: '0.25rem' }}>Buzones de Correo</h1>
                   <p style={{ color: '#64748b', fontSize: '0.938rem' }}>Gestión de cuentas y monitoreo de tráfico.</p>
@@ -946,22 +981,6 @@ const Dashboard: React.FC = () => {
         ) : (
           <div style={{ width: '100%' }}>
             <header style={{ marginBottom: '2.5rem', display: 'flex', alignItems: 'center', gap: '1rem' }}>
-              <button 
-                className="hamburger-btn"
-                onClick={() => setIsSidebarOpen(true)}
-                style={{
-                  display: 'none',
-                  background: 'white',
-                  border: '1px solid #e2e8f0',
-                  padding: '0.5rem',
-                  borderRadius: '0.75rem',
-                  color: '#4f46e5',
-                  cursor: 'pointer',
-                  boxShadow: '0 1px 2px 0 rgba(0, 0, 0, 0.05)'
-                }}
-              >
-                <Menu size={24} />
-              </button>
               <div>
                 <h1 style={{ fontSize: '1.875rem', fontWeight: '800', color: '#1e293b', marginBottom: '0.25rem' }}>Configuración</h1>
                 <p style={{ color: '#64748b', fontSize: '0.938rem' }}>Administra el sistema y revisa el estado del servidor.</p>
