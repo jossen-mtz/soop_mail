@@ -6,7 +6,7 @@ from passlib.hash import sha512_crypt
 from datetime import datetime, timedelta
 from typing import List, Optional
 import platform
-from fastapi import FastAPI, Depends, HTTPException, status, Request
+from fastapi import FastAPI, Depends, HTTPException, status, Request, BackgroundTasks
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
 from fastapi.responses import FileResponse, StreamingResponse
@@ -1263,6 +1263,84 @@ async def delete_mail_user(
     
     return {"message": "User deleted successfully"}
 
+# Mailbox Export
+@app.get("/api/mail/users/{email}/export")
+async def export_mailbox(
+    email: str,
+    background_tasks: BackgroundTasks,
+    request: Request,
+    current_user: models.User = Depends(auth.get_current_active_user),
+    db: Session = Depends(get_db)
+):
+    users = read_users_file()
+    user = next((u for u in users if u['email'] == email), None)
+    if not user:
+        raise HTTPException(status_code=404, detail="Usuario no encontrado")
+    
+    total, new, size_bytes, mailbox_path = get_mailbox_stats(user['home'])
+    if not os.path.exists(mailbox_path):
+        raise HTTPException(status_code=404, detail="El directorio del buzón no existe")
+        
+    # Create temp zip file in a temporary location
+    try:
+        # Use a subfolder in PROJECT_ROOT or /tmp if possible
+        temp_dir = os.path.join(PROJECT_ROOT, "temp_exports")
+        os.makedirs(temp_dir, exist_ok=True)
+        
+        timestamp = datetime.now().strftime('%Y%m%d_%H%M%S')
+        safe_email = email.replace('@', '_at_').replace('.', '_')
+        zip_base_name = os.path.join(temp_dir, f"export_{safe_email}_{timestamp}")
+        
+        # Zip the mailbox directory
+        zip_file_path = shutil.make_archive(zip_base_name, 'zip', mailbox_path)
+        
+        # Schedule deletion after response
+        background_tasks.add_task(os.remove, zip_file_path)
+        
+        log_audit(db, current_user.id, "EXPORT_MAILBOX", "MailUser", email, f"Exportó el buzón de {email}", request=request)
+        
+        return FileResponse(
+            path=zip_file_path,
+            filename=f"buzon_{email}_{timestamp}.zip",
+            media_type="application/zip"
+        )
+    except Exception as e:
+        print(f"ERROR exporting mailbox: {str(e)}")
+        raise HTTPException(status_code=500, detail=f"Error al generar el archivo de exportación: {str(e)}")
+
+@app.get("/api/mail/export-all")
+async def export_all_mailboxes(
+    background_tasks: BackgroundTasks,
+    request: Request,
+    current_user: models.User = Depends(auth.get_current_active_user),
+    db: Session = Depends(get_db)
+):
+    if not os.path.exists(MAIL_BASE):
+        raise HTTPException(status_code=404, detail="El directorio base de correo no existe")
+        
+    try:
+        temp_dir = os.path.join(PROJECT_ROOT, "temp_exports")
+        os.makedirs(temp_dir, exist_ok=True)
+        
+        timestamp = datetime.now().strftime('%Y%m%d_%H%M%S')
+        zip_base_name = os.path.join(temp_dir, f"export_all_mailboxes_{timestamp}")
+        
+        # Zip all mailboxes
+        zip_file_path = shutil.make_archive(zip_base_name, 'zip', MAIL_BASE)
+        
+        background_tasks.add_task(os.remove, zip_file_path)
+        
+        log_audit(db, current_user.id, "EXPORT_ALL_MAILBOXES", "System", "all", "Exportó todos los buzones del sistema", request=request)
+        
+        return FileResponse(
+            path=zip_file_path,
+            filename=f"todos_los_buzones_{timestamp}.zip",
+            media_type="application/zip"
+        )
+    except Exception as e:
+        print(f"ERROR exporting all mailboxes: {str(e)}")
+        raise HTTPException(status_code=500, detail=f"Error al generar la exportación masiva: {str(e)}")
+
 # System Status
 @app.get("/api/system/status", response_model=schemas.SystemStatus)
 async def get_system_status(current_user: models.User = Depends(auth.get_current_active_user)):
@@ -1437,6 +1515,30 @@ async def get_system_status(current_user: models.User = Depends(auth.get_current
             details["disk_free"] = f"{usage.free / (1024**3):.2f} GB"
         except:
             pass
+
+    import ssl
+    import socket
+    def check_ssl_certificate(hostname: str, port: int = 443):
+        context = ssl.create_default_context()
+        try:
+            with socket.create_connection((hostname, port), timeout=3) as sock:
+                with context.wrap_socket(sock, server_hostname=hostname) as ssock:
+                    cert = ssock.getpeercert()
+                    not_after_str = cert['notAfter']
+                    expire_date = datetime.strptime(not_after_str, '%b %d %H:%M:%S %Y %Z')
+                    days_remaining = (expire_date - datetime.utcnow()).days
+                    issuer = dict(x[0] for x in cert['issuer'])
+                    return {
+                        "valid": days_remaining > 0,
+                        "days_remaining": days_remaining,
+                        "expire_date": expire_date.strftime('%Y-%m-%d %H:%M:%S'),
+                        "issuer": issuer.get('organizationName', issuer.get('commonName', 'Unknown')),
+                        "error": None
+                    }
+        except Exception as e:
+            return {"valid": False, "error": str(e)}
+
+    details["ssl_info"] = check_ssl_certificate(DEFAULT_DOMAIN, 443)
 
     return {
         "status": "online",
@@ -1631,30 +1733,6 @@ async def stream_auth_logs(email: Optional[str] = None, current_user: models.Use
 
     return StreamingResponse(auth_log_generator(), media_type="text/event-stream")
 
-# Serve Frontend
-if os.path.exists(STATIC_DIR):
-    app.mount("/assets", StaticFiles(directory=os.path.join(STATIC_DIR, "assets")), name="assets")
-
-    @app.get("/{full_path:path}")
-    async def serve_frontend(full_path: str):
-        # API requests that reach here are truly Not Found
-        if full_path.startswith("api/"):
-            raise HTTPException(status_code=404, detail="API endpoint not found")
-        
-        # 1. Try to serve exact file from static
-        file_path = os.path.join(STATIC_DIR, full_path)
-        if full_path and os.path.isfile(file_path):
-            return FileResponse(file_path)
-            
-        # 2. Otherwise serve index.html (SPA logic)
-        index_path = os.path.join(STATIC_DIR, "index.html")
-        if os.path.exists(index_path):
-            return FileResponse(index_path)
-        
-        raise HTTPException(status_code=404, detail="Frontend build (index.html) not found in static folder")
-else:
-    print(f"WARNING: STATIC_DIR not found at {STATIC_DIR}. Frontend will not be served.")
-
 # Email Traffic Logic
 def sync_email_traffic(db: Session):
     """Parses mail logs to update email traffic statistics."""
@@ -1790,6 +1868,31 @@ async def populate_mock_traffic(
             traffic.received_count = random.randint(20, 250)
     db.commit()
     return {"message": f"Populated {days} days of mock traffic data"}
+
+# Serve Frontend
+if os.path.exists(STATIC_DIR):
+    app.mount("/assets", StaticFiles(directory=os.path.join(STATIC_DIR, "assets")), name="assets")
+
+    @app.get("/{full_path:path}")
+    async def serve_frontend(full_path: str):
+        # API requests that reach here are truly Not Found
+        if full_path.startswith("api/"):
+            raise HTTPException(status_code=404, detail="API endpoint not found")
+        
+        # 1. Try to serve exact file from static
+        file_path = os.path.join(STATIC_DIR, full_path)
+        if full_path and os.path.isfile(file_path):
+            return FileResponse(file_path)
+            
+        # 2. Otherwise serve index.html (SPA logic)
+        index_path = os.path.join(STATIC_DIR, "index.html")
+        if os.path.exists(index_path):
+            return FileResponse(index_path)
+        
+        raise HTTPException(status_code=404, detail="Frontend build (index.html) not found in static folder")
+else:
+    print(f"WARNING: STATIC_DIR not found at {STATIC_DIR}. Frontend will not be served.")
+
 
 if __name__ == "__main__":
     import uvicorn

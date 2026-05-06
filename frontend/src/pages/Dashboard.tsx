@@ -1,4 +1,5 @@
 import React, { useEffect, useState } from 'react';
+import { createPortal } from 'react-dom';
 import { useLocation, NavLink } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
 import api from '../api/axios';
@@ -25,7 +26,8 @@ import {
   FileText,
   AlertTriangle,
   Menu,
-  X
+  X,
+  Download
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { 
@@ -623,6 +625,47 @@ const Dashboard: React.FC = () => {
     setShowDeleteConfirm(true);
   };
 
+  const handleExportMailbox = async (email: string) => {
+    try {
+      const response = await api.get(`/api/mail/users/${email}/export`, {
+        responseType: 'blob'
+      });
+      const url = window.URL.createObjectURL(new Blob([response.data]));
+      const link = document.createElement('a');
+      link.href = url;
+      const timestamp = new Date().toISOString().split('T')[0];
+      link.setAttribute('download', `buzon_${email}_${timestamp}.zip`);
+      document.body.appendChild(link);
+      link.click();
+      link.remove();
+      showNotification('Descarga iniciada', 'success');
+    } catch (error) {
+      console.error('Error exporting mailbox:', error);
+      showNotification('Error al exportar buzón', 'error');
+    }
+  };
+
+  const handleExportAllMailboxes = async () => {
+    try {
+      showNotification('Generando exportación masiva, esto puede tardar unos momentos...', 'success');
+      const response = await api.get('/api/mail/export-all', {
+        responseType: 'blob'
+      });
+      const url = window.URL.createObjectURL(new Blob([response.data]));
+      const link = document.createElement('a');
+      link.href = url;
+      const timestamp = new Date().toISOString().split('T')[0];
+      link.setAttribute('download', `exportacion_completa_${timestamp}.zip`);
+      document.body.appendChild(link);
+      link.click();
+      link.remove();
+      showNotification('Descarga completa iniciada', 'success');
+    } catch (error) {
+      console.error('Error exporting all mailboxes:', error);
+      showNotification('Error al exportar todos los buzones', 'error');
+    }
+  };
+
   const filteredUsers = mailUsers.filter(u => {
     return u.email.toLowerCase().includes(searchTerm.toLowerCase());
   });
@@ -815,10 +858,21 @@ const Dashboard: React.FC = () => {
                   <p style={{ color: '#64748b', fontSize: '0.938rem' }}>Gestión de cuentas y monitoreo de tráfico.</p>
                 </div>
               </div>
-              <button onClick={() => setShowAddModal(true)} className="btn btn-primary" style={{ padding: '0.75rem 1.5rem', borderRadius: '0.875rem' }}>
-                <Plus size={20} />
-                Nuevo Usuario
-              </button>
+              <div style={{ display: 'flex', gap: '0.75rem' }}>
+                <button 
+                  onClick={handleExportAllMailboxes} 
+                  className="btn btn-secondary" 
+                  style={{ padding: '0.75rem 1.5rem', borderRadius: '0.875rem' }}
+                  title="Exportar todos los buzones a ZIP"
+                >
+                  <Download size={20} />
+                  Exportar Todo
+                </button>
+                <button onClick={() => setShowAddModal(true)} className="btn btn-primary" style={{ padding: '0.75rem 1.5rem', borderRadius: '0.875rem' }}>
+                  <Plus size={20} />
+                  Nuevo Usuario
+                </button>
+              </div>
             </header>
             <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(240px, 1fr))', gap: '1.5rem', marginBottom: '2.5rem' }}>
               <div className="card" style={{ padding: '1.5rem', display: 'flex', alignItems: 'center', gap: '1.25rem', border: 'none', background: 'linear-gradient(135deg, #4f46e5 0%, #6366f1 100%)', color: '#ffffff' }}>
@@ -967,6 +1021,14 @@ const Dashboard: React.FC = () => {
                               title="Editar usuario"
                             >
                               <Edit2 size={18} />
+                            </button>
+                            <button 
+                              onClick={() => handleExportMailbox(u.email)} 
+                              className="btn btn-secondary" 
+                              style={{ color: '#10b981', padding: '0.5rem', border: 'none', background: 'transparent', boxShadow: 'none' }}
+                              title="Exportar buzón"
+                            >
+                              <Download size={18} />
                             </button>
                             <button 
                               onClick={() => handleDeleteUser(u.email)} 
@@ -1723,6 +1785,49 @@ const Dashboard: React.FC = () => {
                           ))}
                         </div>
                       </div>
+
+                      {/* SSL Certificate Details */}
+                      <div className="card" style={{ padding: '1.5rem' }}>
+                        <h4 style={{ fontSize: '1rem', fontWeight: '700', color: '#1e293b', marginBottom: '1rem', display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+                          <Shield size={18} style={{ color: '#10b981' }} />
+                          Certificado SSL
+                        </h4>
+                        <div style={{ display: 'grid', gap: '0.75rem' }}>
+                          {systemStatus?.details?.ssl_info ? (
+                            <>
+                              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '0.75rem' }}>
+                                <div style={{ padding: '0.75rem', background: '#f8fafc', borderRadius: '0.5rem', border: '1px solid #f1f5f9' }}>
+                                  <div style={{ fontSize: '0.7rem', color: '#64748b', fontWeight: '600', textTransform: 'uppercase', marginBottom: '0.25rem' }}>Estado</div>
+                                  <div style={{ fontSize: '0.813rem', fontWeight: '700', color: systemStatus.details.ssl_info.valid ? '#16a34a' : '#dc2626' }}>
+                                    {systemStatus.details.ssl_info.valid ? 'Válido' : 'Inválido / Error'}
+                                  </div>
+                                </div>
+                                <div style={{ padding: '0.75rem', background: '#f8fafc', borderRadius: '0.5rem', border: '1px solid #f1f5f9' }}>
+                                  <div style={{ fontSize: '0.7rem', color: '#64748b', fontWeight: '600', textTransform: 'uppercase', marginBottom: '0.25rem' }}>Días Restantes</div>
+                                  <div style={{ fontSize: '0.813rem', color: '#1e293b', fontWeight: '700' }}>{systemStatus.details.ssl_info.days_remaining ?? 'N/A'}</div>
+                                </div>
+                              </div>
+                              <div style={{ padding: '0.75rem', background: '#f8fafc', borderRadius: '0.5rem', border: '1px solid #f1f5f9' }}>
+                                <div style={{ fontSize: '0.7rem', color: '#64748b', fontWeight: '600', textTransform: 'uppercase', marginBottom: '0.25rem' }}>Expiración</div>
+                                <div style={{ fontSize: '0.813rem', color: '#1e293b', fontFamily: 'monospace' }}>{systemStatus.details.ssl_info.expire_date || 'N/A'}</div>
+                              </div>
+                              <div style={{ padding: '0.75rem', background: '#f8fafc', borderRadius: '0.5rem', border: '1px solid #f1f5f9' }}>
+                                <div style={{ fontSize: '0.7rem', color: '#64748b', fontWeight: '600', textTransform: 'uppercase', marginBottom: '0.25rem' }}>Emisor</div>
+                                <div style={{ fontSize: '0.813rem', color: '#1e293b' }}>{systemStatus.details.ssl_info.issuer || 'N/A'}</div>
+                              </div>
+                            </>
+                          ) : (
+                            <div style={{ padding: '0.75rem', background: '#f8fafc', borderRadius: '0.5rem', color: '#64748b', fontSize: '0.813rem' }}>
+                              Cargando información SSL...
+                            </div>
+                          )}
+                          {systemStatus?.details?.ssl_info?.error && (
+                            <div style={{ padding: '0.75rem', background: '#fff1f2', borderRadius: '0.5rem', border: '1px solid #ffe4e6', color: '#e11d48', fontSize: '0.75rem' }}>
+                              <strong>Error de conexión TLS:</strong> {systemStatus.details.ssl_info.error}
+                            </div>
+                          )}
+                        </div>
+                      </div>
                     </div>
 
 
@@ -2130,7 +2235,7 @@ const Dashboard: React.FC = () => {
         )}
       </AnimatePresence>
 
-      {showAddModal && (
+      {showAddModal && createPortal(
         <div className="modal-overlay">
           <motion.div 
             initial={{ opacity: 0, y: 20 }}
@@ -2255,10 +2360,11 @@ const Dashboard: React.FC = () => {
               </div>
             </form>
           </motion.div>
-        </div>
+        </div>,
+        document.body
       )}
 
-      {showViewModal && selectedMailUser && (
+      {showViewModal && selectedMailUser && createPortal(
         <div style={{ 
           position: 'fixed', 
           inset: 0, 
@@ -2462,11 +2568,12 @@ const Dashboard: React.FC = () => {
               <button onClick={() => setShowViewModal(false)} className="btn btn-secondary" style={{ flex: 1 }}>Cerrar</button>
             </div>
           </motion.div>
-        </div>
+        </div>,
+        document.body
       )}
 
       {/* Edit User Modal */}
-      {showEditModal && selectedMailUser && (
+      {showEditModal && selectedMailUser && createPortal(
         <div style={{ 
           position: 'fixed', 
           inset: 0, 
@@ -2569,11 +2676,12 @@ const Dashboard: React.FC = () => {
               </div>
             </form>
           </motion.div>
-        </div>
+        </div>,
+        document.body
       )}
 
       {/* Delete Confirmation Modal */}
-      {showDeleteConfirm && deleteConfig && (
+      {showDeleteConfirm && deleteConfig && createPortal(
         <div style={{ 
           position: 'fixed', 
           inset: 0, 
@@ -2628,12 +2736,13 @@ const Dashboard: React.FC = () => {
               </button>
             </div>
           </motion.div>
-        </div>
+        </div>,
+        document.body
       )}
 
 
       {/* Add Alias Modal */}
-      {showAddAliasModal && (
+      {showAddAliasModal && createPortal(
         <div className="modal-overlay">
           <motion.div 
             initial={{ opacity: 0, scale: 0.95 }}
@@ -2885,11 +2994,12 @@ const Dashboard: React.FC = () => {
               </div>
             </form>
           </motion.div>
-        </div>
+        </div>,
+        document.body
       )}
 
       {/* Add BCC Rule Modal */}
-      {showAddForwardingModal && (
+      {showAddForwardingModal && createPortal(
         <div className="modal-overlay">
           <motion.div 
             initial={{ opacity: 0, y: 20 }}
@@ -3000,11 +3110,12 @@ const Dashboard: React.FC = () => {
               </div>
             </form>
           </motion.div>
-        </div>
+        </div>,
+        document.body
       )}
 
       {/* Add Forward Modal (Virtual) */}
-      {showAddForwardModal && (
+      {showAddForwardModal && createPortal(
         <div className="modal-overlay">
           <motion.div 
             initial={{ opacity: 0, y: 20 }}
@@ -3130,7 +3241,8 @@ const Dashboard: React.FC = () => {
               </div>
             </form>
           </motion.div>
-        </div>
+        </div>,
+        document.body
       )}
     </div>
   );
