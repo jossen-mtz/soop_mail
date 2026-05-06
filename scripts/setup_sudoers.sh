@@ -3,106 +3,164 @@
 # setup_sudoers.sh - Soop Mail privilege configuration
 # Run ONCE on the server as root or with sudo:
 #   sudo bash scripts/setup_sudoers.sh
+#
+# Strategy:
+#   - Mail dirs STAY owned by vmail:vmail (Dovecot/Roundcube need this)
+#   - www-data joins the vmail group for read access
+#   - setgid on mail dirs so new subdirs inherit vmail group
+#   - sudoers grants www-data passwordless: postmap, postfix reload,
+#     chown vmail:vmail on mail dirs, systemctl reload dovecot
 # ============================================================
 
 set -e
 
-# Auto-detect the user running the soop_mail service
+# --- Auto-detect service user ---
 SOOP_USER=$(systemctl show -pUser soop_mail 2>/dev/null | cut -d= -f2)
 if [ -z "$SOOP_USER" ]; then
-    # Fallback: ask the user
-    echo "Could not auto-detect service user. Enter the user running soop_mail (e.g. www-data, ubuntu):"
+    echo "Could not auto-detect service user. Enter the user running soop_mail (e.g. www-data):"
     read SOOP_USER
 fi
 
 echo "==> Configuring for user: $SOOP_USER"
 
-# 1. Grant write access to /etc/postfix/vmailbox and /etc/dovecot/users
-echo "==> Setting file ownership for Postfix and Dovecot config files..."
+# --- Get vmail UID/GID (Dovecot virtual mail user) ---
+VMAIL_USER="vmail"
+VMAIL_UID=5000
+VMAIL_GID=5000
+
+# Check if vmail user exists
+if id "$VMAIL_USER" &>/dev/null; then
+    VMAIL_UID=$(id -u "$VMAIL_USER")
+    VMAIL_GID=$(id -g "$VMAIL_USER")
+    echo "==> vmail user found: UID=$VMAIL_UID GID=$VMAIL_GID"
+else
+    echo "==> vmail user not found, using defaults UID=$VMAIL_UID GID=$VMAIL_GID"
+fi
+
+# ============================================================
+# STEP 1: Postfix and Dovecot config files
+# These need to be writable by www-data but don't affect mail delivery
+# ============================================================
+echo ""
+echo "==> [1/5] Configuring Postfix/Dovecot config file permissions..."
 for FILE in /etc/postfix/vmailbox /etc/postfix/virtual /etc/postfix/sender_bcc /etc/postfix/recipient_bcc; do
-    if [ -f "$FILE" ]; then
-        chown root:$SOOP_USER "$FILE"
-        chmod 664 "$FILE"
-        echo "    OK: $FILE"
-    else
+    if [ ! -f "$FILE" ]; then
         touch "$FILE"
-        chown root:$SOOP_USER "$FILE"
-        chmod 664 "$FILE"
         echo "    Created: $FILE"
     fi
+    chown root:$SOOP_USER "$FILE"
+    chmod 664 "$FILE"
+    echo "    OK: $FILE (root:$SOOP_USER 664)"
 done
 
 if [ -f /etc/dovecot/users ]; then
     chown root:$SOOP_USER /etc/dovecot/users
     chmod 664 /etc/dovecot/users
-    echo "    OK: /etc/dovecot/users"
+    echo "    OK: /etc/dovecot/users (root:$SOOP_USER 664)"
 fi
 
-# 2. Grant access to mail directory
+# ============================================================
+# STEP 2: Add www-data to the vmail group
+# This lets www-data READ mail directories without changing owner
+# ============================================================
+echo ""
+echo "==> [2/5] Adding $SOOP_USER to the $VMAIL_USER group..."
+if getent group "$VMAIL_USER" &>/dev/null; then
+    usermod -aG "$VMAIL_USER" "$SOOP_USER"
+    echo "    OK: $SOOP_USER added to $VMAIL_USER group"
+    echo "    NOTE: Restart soop_mail service for group change to take effect"
+else
+    echo "    WARNING: Group '$VMAIL_USER' does not exist. Skipping."
+fi
+
+# ============================================================
+# STEP 3: Fix mail directory ownership (BACK to vmail:vmail)
+# Then set setgid so new subdirs inherit the vmail group
+# www-data (now in vmail group) can create subdirs but vmail stays owner
+# ============================================================
+echo ""
+echo "==> [3/5] Restoring mail directory ownership to $VMAIL_USER:$VMAIL_USER..."
 MAIL_DIRS="/var/mail/vhosts /var/mail/soop_mail /var/vmail"
 for MAIL_DIR in $MAIL_DIRS; do
     if [ -d "$MAIL_DIR" ]; then
-        echo "==> Granting access to mail directory $MAIL_DIR..."
-        chown -R $SOOP_USER:$SOOP_USER "$MAIL_DIR"
-        chmod -R 750 "$MAIL_DIR"
-        echo "    OK: $MAIL_DIR"
+        # Restore ownership to vmail:vmail (so Dovecot/Roundcube can read)
+        chown -R "$VMAIL_USER":"$VMAIL_USER" "$MAIL_DIR" 2>/dev/null || \
+        chown -R "$VMAIL_UID":"$VMAIL_GID" "$MAIL_DIR"
+        
+        # setgid (2) = new files/dirs inherit the group (vmail)
+        # group write (g+w) = www-data (in vmail group) can create subdirs
+        chmod -R 2770 "$MAIL_DIR"
+        
+        # The top-level dir needs execute for traversal
+        chmod 2770 "$MAIL_DIR"
+        echo "    OK: $MAIL_DIR (owned by $VMAIL_USER:$VMAIL_USER, mode 2770)"
     fi
 done
 
-# 3. Create sudoers file for postfix/dovecot commands
+# ============================================================
+# STEP 4: Create sudoers file
+# www-data can: postmap, postfix reload, chown new mailboxes,
+# systemctl reload dovecot
+# ============================================================
+echo ""
+echo "==> [4/5] Creating sudoers file at /etc/sudoers.d/soop_mail..."
+
 SUDOERS_FILE="/etc/sudoers.d/soop_mail"
-echo "==> Creating sudoers file at $SUDOERS_FILE..."
-
 cat > "$SUDOERS_FILE" << EOF
-# Soop Mail - Allow service user to manage mail services without password
-# Generated by setup_sudoers.sh
+# Soop Mail - Privilege grants for $SOOP_USER
+# Generated by setup_sudoers.sh - $(date)
 
-# Allow postmap (index postfix map files)
+# Postfix map indexing (postmap does not need full root, but binary requires it)
 $SOOP_USER ALL=(ALL) NOPASSWD: /usr/sbin/postmap
 
-# Allow postfix reload/reload
+# Postfix reload (the binary enforces superuser)
 $SOOP_USER ALL=(ALL) NOPASSWD: /usr/sbin/postfix reload
 $SOOP_USER ALL=(ALL) NOPASSWD: /usr/sbin/postfix status
 $SOOP_USER ALL=(ALL) NOPASSWD: /usr/bin/systemctl reload postfix
 $SOOP_USER ALL=(ALL) NOPASSWD: /usr/bin/systemctl restart postfix
 
-# Allow dovecot reload
+# Dovecot reload (for new user authentication)
 $SOOP_USER ALL=(ALL) NOPASSWD: /usr/bin/systemctl reload dovecot
 $SOOP_USER ALL=(ALL) NOPASSWD: /usr/bin/systemctl restart dovecot
 
-# Allow chown on mail directories (for new mailbox creation)
-$SOOP_USER ALL=(ALL) NOPASSWD: /bin/chown -R 5000\:5000 /var/mail/*
-$SOOP_USER ALL=(ALL) NOPASSWD: /bin/chown -R vmail\:vmail /var/mail/*
-$SOOP_USER ALL=(ALL) NOPASSWD: /bin/chmod -R 700 /var/mail/*
+# Set ownership of NEW mailboxes to vmail (Dovecot needs vmail:vmail to read)
+$SOOP_USER ALL=(ALL) NOPASSWD: /bin/chown -R $VMAIL_UID\:$VMAIL_GID /var/mail/vhosts/*
+$SOOP_USER ALL=(ALL) NOPASSWD: /bin/chown -R $VMAIL_UID\:$VMAIL_GID /var/mail/soop_mail/*
+$SOOP_USER ALL=(ALL) NOPASSWD: /bin/chown -R $VMAIL_USER\:$VMAIL_USER /var/mail/vhosts/*
+$SOOP_USER ALL=(ALL) NOPASSWD: /bin/chown -R $VMAIL_USER\:$VMAIL_USER /var/mail/soop_mail/*
+
+# Set permissions on new mailboxes
+$SOOP_USER ALL=(ALL) NOPASSWD: /bin/chmod -R 700 /var/mail/vhosts/*
+$SOOP_USER ALL=(ALL) NOPASSWD: /bin/chmod -R 700 /var/mail/soop_mail/*
 EOF
 
 chmod 440 "$SUDOERS_FILE"
 
-# 4. Validate the sudoers file
 if visudo -cf "$SUDOERS_FILE"; then
     echo "    OK: Sudoers file is valid"
 else
-    echo "    ERROR: Sudoers file has syntax errors. Removing..."
+    echo "    ERROR: Sudoers syntax error. Removing file."
     rm "$SUDOERS_FILE"
     exit 1
 fi
 
-# 5. Restart soop_mail service to pick up new permissions
-echo "==> Restarting soop_mail service..."
+# ============================================================
+# STEP 5: Restart soop_mail service
+# ============================================================
+echo ""
+echo "==> [5/5] Restarting soop_mail service..."
 systemctl restart soop_mail
 echo "    OK: Service restarted"
 
 echo ""
-echo "============================="
+echo "============================================="
 echo " Setup complete!"
-echo "============================="
-echo " User '$SOOP_USER' can now:"
-echo "  - Write to /etc/postfix/vmailbox"
-echo "  - Run postmap and postfix reload"
-echo "  - Reload dovecot"
-echo "  - Set ownership of new mailboxes"
+echo "============================================="
+echo " Mail directories: owned by $VMAIL_USER:$VMAIL_USER (Dovecot/Roundcube OK)"
+echo " $SOOP_USER is now in group $VMAIL_USER (can create subdirs)"
+echo " $SOOP_USER can sudo: postmap, postfix reload, chown vmail"
 echo ""
-echo " Test by creating a user in the dashboard."
-echo "============================="
-
-
+echo " IMPORTANT: If Roundcube/Dovecot still can't read mail,"
+echo " verify with: ls -la /var/mail/vhosts/"
+echo " All dirs should show: drwxrws--- vmail vmail"
+echo "============================================="
