@@ -544,6 +544,34 @@ def _write_privileged(path: str, content: str) -> tuple:
             print(msg)
             return False, msg
 
+def _reload_postfix():
+    """Try to reload postfix using available methods."""
+    methods = [
+        (['postfix', 'reload'], "postfix reload"),
+        (['systemctl', 'reload', 'postfix'], "systemctl reload postfix"),
+        (['systemctl', 'restart', 'postfix'], "systemctl restart postfix"),
+    ]
+    for cmd, desc in methods:
+        ok, err = _run_privileged(cmd, desc)
+        if ok:
+            return True
+    print(f"CRITICAL: All postfix reload methods failed. Run manually: sudo postfix reload")
+    return False
+
+def _reload_dovecot():
+    """Try to reload dovecot using available methods."""
+    methods = [
+        (['systemctl', 'reload', 'dovecot'], "systemctl reload dovecot"),
+        (['systemctl', 'restart', 'dovecot'], "systemctl restart dovecot"),
+        (['dovecot', 'reload'], "dovecot reload"),
+    ]
+    for cmd, desc in methods:
+        ok, err = _run_privileged(cmd, desc)
+        if ok:
+            return True
+    print(f"WARNING: All dovecot reload methods failed. Run manually: sudo systemctl reload dovecot")
+    return False
+
 def update_postfix_vmailbox(users: List[dict]):
     try:
         # Build content
@@ -562,7 +590,6 @@ def update_postfix_vmailbox(users: List[dict]):
         if not ok:
             print(f"CRITICAL: Could not write vmailbox file. Postfix will NOT recognize new users. {err}")
             print(f"HINT: Run: sudo chmod 664 {POSTFIX_VMAILBOX} && sudo chown root:$(whoami) {POSTFIX_VMAILBOX}")
-            # Try to write a diagnostic copy in the project dir
             fallback = os.path.join(BASE_DIR, 'vmailbox.pending')
             try:
                 with open(fallback, 'w') as f:
@@ -579,13 +606,11 @@ def update_postfix_vmailbox(users: List[dict]):
                 _run_privileged(['chmod', '644', POSTFIX_VMAILBOX], "chmod vmailbox")
 
             ok1, err1 = _run_privileged(['postmap', POSTFIX_VMAILBOX], "postmap vmailbox")
-            ok2, err2 = _run_privileged(['postfix', 'reload'], "postfix reload")
-
             if not ok1:
                 print(f"CRITICAL: postmap failed - new users won't be in Postfix lookup table.")
                 print(f"HINT: Run manually: sudo postmap {POSTFIX_VMAILBOX} && sudo postfix reload")
-            if not ok2:
-                print(f"WARNING: postfix reload failed - changes may not take effect immediately.")
+
+            _reload_postfix()
 
         return True
     except Exception as e:
@@ -640,11 +665,8 @@ def write_users_file(users: List[dict]):
         update_postfix_vmailbox(users)
         
         # Reload Dovecot
-        try:
-            if os.name != 'nt':
-                subprocess.run(['systemctl', 'reload', 'dovecot'], check=True)
-        except:
-            pass
+        if os.name != 'nt':
+            _reload_dovecot()
             
         return True
     except Exception as e:
@@ -1326,13 +1348,12 @@ async def create_mail_user(
             os.makedirs(os.path.join(maildir_path, d), exist_ok=True)
             
         if os.name != 'nt':
-            # chown -R vmail:vmail
-            try:
-                # Use sh to run chown recursively safely
-                subprocess.run(['chown', '-R', f"{VMAIL_UID}:{VMAIL_GID}", user_home], check=True)
-                subprocess.run(['chmod', '-R', '700', user_home], check=True)
-            except Exception as e:
-                print(f"Warning: Could not set permissions: {str(e)}")
+            # chown -R vmail:vmail (try direct first, then sudo)
+            ok1, _ = _run_privileged(['chown', '-R', f"{VMAIL_UID}:{VMAIL_GID}", user_home], "chown maildir")
+            ok2, _ = _run_privileged(['chmod', '-R', '700', user_home], "chmod maildir")
+            if not ok1:
+                print(f"WARNING: Could not set ownership of {user_home} to {VMAIL_UID}:{VMAIL_GID}")
+                print(f"HINT: Run: sudo chown -R {VMAIL_UID}:{VMAIL_GID} {user_home}")
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Error creating mail directory: {str(e)}")
     
