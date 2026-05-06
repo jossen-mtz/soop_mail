@@ -788,6 +788,66 @@ async def get_audit_logs(
     return logs
 
 # User Management (Mail Users)
+@app.get("/api/system/diagnostics")
+async def get_system_diagnostics(current_user: models.User = Depends(auth.get_current_admin_user)):
+    issues = []
+    
+    paths_to_check = [
+        ("Base de Datos de Usuarios (USERS_FILE)", USERS_FILE),
+        ("Tabla de Alias Virtuales (VIRTUAL_MAP)", VIRTUAL_MAP),
+        ("Tabla de Buzones Virtuales (VMAILBOX_MAP)", VMAILBOX_MAP),
+        ("Tabla de BCC Remitentes", SENDER_BCC_FILE),
+        ("Tabla de BCC Destinatarios", RECIPIENT_BCC_FILE),
+        ("Directorio de Correos (MAIL_BASE)", MAIL_BASE)
+    ]
+    
+    # We will output suggested fixes for the frontend
+    for label, path in paths_to_check:
+        if not path:
+            continue
+            
+        is_dir = label == "Directorio de Correos (MAIL_BASE)"
+        
+        # Check if it exists
+        if not os.path.exists(path):
+            parent_dir = os.path.dirname(path)
+            # If parent dir does not exist or is not writable
+            if not os.path.exists(parent_dir):
+                issues.append({
+                    "path": path,
+                    "label": label,
+                    "error": "El directorio padre no existe",
+                    "fix_command": f"sudo mkdir -p {parent_dir} && sudo chown -R $USER:$USER {parent_dir}"
+                })
+            elif not os.access(parent_dir, os.W_OK):
+                issues.append({
+                    "path": path,
+                    "label": label,
+                    "error": "El sistema no tiene permisos de escritura en el directorio padre para crear el archivo",
+                    "fix_command": f"sudo chown -R $USER:$USER {parent_dir}"
+                })
+        else:
+            # Check read and write permissions
+            if not os.access(path, os.R_OK):
+                issues.append({
+                    "path": path,
+                    "label": label,
+                    "error": "Sin permisos de lectura",
+                    "fix_command": f"sudo chmod +r {path} && sudo chown -R $USER:$USER {path}"
+                })
+            elif not os.access(path, os.W_OK):
+                issues.append({
+                    "path": path,
+                    "label": label,
+                    "error": "Sin permisos de escritura (requerido para crear buzones/alias)",
+                    "fix_command": f"sudo chmod +w {path} && sudo chown -R $USER:$USER {path}"
+                })
+                
+    if not issues:
+        return {"ok": True, "issues": []}
+    
+    return {"ok": False, "issues": issues}
+
 @app.get("/api/mail/users", response_model=List[schemas.SoopMailUserBase])
 async def get_mail_users(current_user: models.User = Depends(auth.get_current_active_user)):
     users = read_users_file()
@@ -857,6 +917,94 @@ async def purge_mailbox(
     log_audit(db, current_user.id, "PURGE_MAILBOX", "MailUser", email, f"Purged {purged_count} emails from {email}", request=request)
     
     return {"message": f"Buzón vaciado con éxito. Se eliminaron {purged_count} correos.", "count": purged_count}
+
+def cleanup_file(path: str):
+    import os
+    try:
+        os.unlink(path)
+    except:
+        pass
+
+@app.get("/api/mail/users/{email}/export")
+async def export_mailbox(
+    email: str,
+    background_tasks: BackgroundTasks,
+    request: Request,
+    db: Session = Depends(get_db),
+    current_user: models.User = Depends(auth.get_current_active_user)
+):
+    users = read_users_file()
+    user = next((u for u in users if u['email'] == email), None)
+    if not user:
+        raise HTTPException(status_code=404, detail="Mailbox not found")
+        
+    _, _, _, mailbox_path = get_mailbox_stats(user['home'])
+    if not mailbox_path or not os.path.exists(mailbox_path):
+        raise HTTPException(status_code=404, detail="Mailbox directory not found")
+        
+    import tempfile
+    import shutil
+    
+    fd, temp_path = tempfile.mkstemp(suffix='.zip')
+    os.close(fd)
+    
+    try:
+        shutil.make_archive(temp_path.replace('.zip', ''), 'zip', mailbox_path)
+        background_tasks.add_task(cleanup_file, temp_path)
+        log_audit(db, current_user.id, "EXPORT_MAILBOX", "MailUser", email, f"Exported mailbox {email}", request=request)
+        return FileResponse(
+            path=temp_path,
+            filename=f"mailbox_{email}.zip",
+            media_type="application/zip"
+        )
+    except Exception as e:
+        cleanup_file(temp_path)
+        raise HTTPException(status_code=500, detail=f"Error exporting mailbox: {str(e)}")
+
+@app.get("/api/mail/export-all")
+async def export_all_mailboxes(
+    background_tasks: BackgroundTasks,
+    request: Request,
+    db: Session = Depends(get_db),
+    current_user: models.User = Depends(auth.get_current_active_user)
+):
+    users = read_users_file()
+    if not users:
+        raise HTTPException(status_code=404, detail="No mailboxes found")
+        
+    import tempfile
+    import shutil
+    from datetime import datetime
+    temp_dir = tempfile.mkdtemp()
+    
+    try:
+        for u in users:
+            _, _, _, mailbox_path = get_mailbox_stats(u['home'])
+            if mailbox_path and os.path.exists(mailbox_path):
+                dest_path = os.path.join(temp_dir, u['email'])
+                shutil.copytree(mailbox_path, dest_path, dirs_exist_ok=True)
+                
+        fd, temp_zip = tempfile.mkstemp(suffix='.zip')
+        os.close(fd)
+        
+        shutil.make_archive(temp_zip.replace('.zip', ''), 'zip', temp_dir)
+        
+        def cleanup_all():
+            shutil.rmtree(temp_dir, ignore_errors=True)
+            cleanup_file(temp_zip)
+            
+        background_tasks.add_task(cleanup_all)
+        log_audit(db, current_user.id, "EXPORT_ALL_MAILBOXES", "System", None, "Exported all mailboxes", request=request)
+        
+        return FileResponse(
+            path=temp_zip,
+            filename=f"all_mailboxes_{datetime.now().strftime('%Y%m%d')}.zip",
+            media_type="application/zip"
+        )
+    except Exception as e:
+        shutil.rmtree(temp_dir, ignore_errors=True)
+        raise HTTPException(status_code=500, detail=f"Error exporting all mailboxes: {str(e)}")
+
 
 @app.post("/api/mail/users", status_code=status.HTTP_201_CREATED)
 async def create_mail_user(
@@ -1539,6 +1687,15 @@ async def get_system_status(current_user: models.User = Depends(auth.get_current
             return {"valid": False, "error": str(e)}
 
     details["ssl_info"] = check_ssl_certificate(DEFAULT_DOMAIN, 443)
+    
+    try:
+        if os.name != 'nt':
+            certbot_check = subprocess.run(['systemctl', 'is-active', 'certbot.timer'], capture_output=True, text=True)
+            details["ssl_info"]["auto_renew_active"] = certbot_check.stdout.strip() == 'active'
+        else:
+            details["ssl_info"]["auto_renew_active"] = True
+    except:
+        details["ssl_info"]["auto_renew_active"] = False
 
     return {
         "status": "online",

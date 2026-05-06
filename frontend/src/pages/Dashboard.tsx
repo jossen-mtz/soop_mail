@@ -142,6 +142,7 @@ const Dashboard: React.FC = () => {
   const [userAuthLogs, setUserAuthLogs] = useState<string[]>([]);
   const [mailLogs, setMailLogs] = useState<any>(null);
   const [auditLogs, setAuditLogs] = useState<any[]>([]);
+  const [diagnostics, setDiagnostics] = useState<any[] | null>(null);
   const [profileForm, setProfileForm] = useState({
     email: user?.email || '',
     full_name: user?.full_name || ''
@@ -245,6 +246,23 @@ const Dashboard: React.FC = () => {
       showNotification('Error al cargar reenvíos', 'error');
     }
   };
+
+  const fetchDiagnostics = async () => {
+    try {
+      const response = await api.get('/api/system/diagnostics');
+      if (!response.data.ok) {
+        setDiagnostics(response.data.issues);
+      } else {
+        setDiagnostics(null);
+      }
+    } catch (err) {
+      console.error('Error fetching diagnostics:', err);
+    }
+  };
+
+  useEffect(() => {
+    fetchDiagnostics();
+  }, []);
 
   const fetchMailUsers = async () => {
     try {
@@ -676,6 +694,65 @@ const Dashboard: React.FC = () => {
 
   return (
     <div className="dashboard-layout">
+      {/* Diagnostics Modal */}
+      {diagnostics && diagnostics.length > 0 && createPortal(
+        <div style={{ 
+          position: 'fixed', 
+          inset: 0, 
+          background: 'rgba(15, 23, 42, 0.7)', 
+          backdropFilter: 'blur(8px)',
+          display: 'flex', 
+          alignItems: 'center', 
+          justifyContent: 'center',
+          zIndex: 9999
+        }}>
+          <motion.div 
+            initial={{ scale: 0.9, opacity: 0, y: 20 }}
+            animate={{ scale: 1, opacity: 1, y: 0 }}
+            className="card" 
+            style={{ width: '100%', maxWidth: '700px', padding: '2.5rem', border: 'none', boxShadow: '0 25px 50px -12px rgba(0, 0, 0, 0.5)' }}
+          >
+            <div style={{ display: 'flex', gap: '1rem', alignItems: 'center', marginBottom: '1.5rem', color: '#ef4444' }}>
+              <AlertCircle size={32} />
+              <h2 style={{ fontSize: '1.5rem', fontWeight: '800', color: '#1e293b', margin: 0 }}>Atención: Problemas de Permisos</h2>
+            </div>
+            
+            <p style={{ color: '#475569', fontSize: '0.95rem', marginBottom: '2rem', lineHeight: 1.5 }}>
+              El sistema no tiene los permisos necesarios para crear o modificar los archivos de configuración del correo. 
+              <strong> Esto causará errores (ej. "Usuario desconocido") al enviar/recibir correos.</strong> <br/>
+              Por favor, ejecuta los siguientes comandos en tu servidor para solucionarlo:
+            </p>
+            
+            <div style={{ display: 'flex', flexDirection: 'column', gap: '1rem', maxHeight: '400px', overflowY: 'auto' }}>
+              {diagnostics.map((issue: any, idx: number) => (
+                <div key={idx} style={{ background: '#f1f5f9', padding: '1rem', borderRadius: '0.5rem', border: '1px solid #cbd5e1' }}>
+                  <div style={{ fontWeight: '700', color: '#1e293b', marginBottom: '0.25rem' }}>{issue.label}</div>
+                  <div style={{ color: '#ef4444', fontSize: '0.813rem', marginBottom: '0.5rem' }}>{issue.error}: <span style={{color: '#64748b'}}>{issue.path}</span></div>
+                  <code style={{ 
+                    display: 'block', 
+                    padding: '0.75rem', 
+                    background: '#1e293b', 
+                    color: '#e2e8f0', 
+                    borderRadius: '0.25rem', 
+                    fontSize: '0.813rem',
+                    fontFamily: 'monospace'
+                  }}>
+                    {issue.fix_command}
+                  </code>
+                </div>
+              ))}
+            </div>
+
+            <div style={{ display: 'flex', justifyContent: 'flex-end', marginTop: '2rem' }}>
+              <button onClick={() => fetchDiagnostics()} className="btn btn-primary">
+                Reintentar Validación
+              </button>
+            </div>
+          </motion.div>
+        </div>,
+        document.body
+      )}
+
       {/* Top Bar for Mobile */}
       <div className="mobile-top-bar">
         <button 
@@ -1811,9 +1888,17 @@ const Dashboard: React.FC = () => {
                                 <div style={{ fontSize: '0.7rem', color: '#64748b', fontWeight: '600', textTransform: 'uppercase', marginBottom: '0.25rem' }}>Expiración</div>
                                 <div style={{ fontSize: '0.813rem', color: '#1e293b', fontFamily: 'monospace' }}>{systemStatus.details.ssl_info.expire_date || 'N/A'}</div>
                               </div>
-                              <div style={{ padding: '0.75rem', background: '#f8fafc', borderRadius: '0.5rem', border: '1px solid #f1f5f9' }}>
-                                <div style={{ fontSize: '0.7rem', color: '#64748b', fontWeight: '600', textTransform: 'uppercase', marginBottom: '0.25rem' }}>Emisor</div>
-                                <div style={{ fontSize: '0.813rem', color: '#1e293b' }}>{systemStatus.details.ssl_info.issuer || 'N/A'}</div>
+                              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '0.75rem' }}>
+                                <div style={{ padding: '0.75rem', background: '#f8fafc', borderRadius: '0.5rem', border: '1px solid #f1f5f9' }}>
+                                  <div style={{ fontSize: '0.7rem', color: '#64748b', fontWeight: '600', textTransform: 'uppercase', marginBottom: '0.25rem' }}>Emisor</div>
+                                  <div style={{ fontSize: '0.813rem', color: '#1e293b' }}>{systemStatus.details.ssl_info.issuer || 'N/A'}</div>
+                                </div>
+                                <div style={{ padding: '0.75rem', background: '#f8fafc', borderRadius: '0.5rem', border: '1px solid #f1f5f9' }}>
+                                  <div style={{ fontSize: '0.7rem', color: '#64748b', fontWeight: '600', textTransform: 'uppercase', marginBottom: '0.25rem' }}>Auto-Renovación (Task)</div>
+                                  <div style={{ fontSize: '0.813rem', fontWeight: '700', color: systemStatus.details.ssl_info.auto_renew_active ? '#16a34a' : '#dc2626' }}>
+                                    {systemStatus.details.ssl_info.auto_renew_active ? 'Activa' : 'Inactiva / No detectada'}
+                                  </div>
+                                </div>
                               </div>
                             </>
                           ) : (
@@ -2217,7 +2302,7 @@ const Dashboard: React.FC = () => {
               position: 'fixed', 
               bottom: '2rem', 
               right: '2rem', 
-              zIndex: 1000,
+              zIndex: 9999,
               background: notification.type === 'success' ? '#ffffff' : '#fef2f2',
               color: notification.type === 'success' ? '#16a34a' : '#dc2626',
               padding: '1rem 1.25rem',
@@ -2373,7 +2458,7 @@ const Dashboard: React.FC = () => {
           display: 'flex', 
           alignItems: 'center', 
           justifyContent: 'center',
-          zIndex: 100
+          zIndex: 1100
         }}>
           <motion.div 
             initial={{ scale: 0.9, opacity: 0, y: 20 }}
@@ -2439,7 +2524,7 @@ const Dashboard: React.FC = () => {
             {detailsTab === 'general' ? (
               <div style={{ display: 'flex', flexDirection: 'column', gap: '1.5rem' }}>
               <div className="input-group">
-                <label>{isGroupMode ? 'Dirección del Grupo' : 'Dirección del Alias'}</label>
+                <label>Dirección de Correo</label>
                 <div style={{ fontWeight: '700', color: '#1e293b', fontSize: '1.125rem', padding: '0.75rem 1rem', background: '#f8fafc', borderRadius: '0.75rem', border: '1px solid #e2e8f0' }}>
                   {selectedMailUser.email}
                 </div>
@@ -2582,7 +2667,7 @@ const Dashboard: React.FC = () => {
           display: 'flex', 
           alignItems: 'center', 
           justifyContent: 'center',
-          zIndex: 100
+          zIndex: 1100
         }}>
           <motion.div 
             initial={{ scale: 0.9, opacity: 0, y: 20 }}
@@ -2690,7 +2775,7 @@ const Dashboard: React.FC = () => {
           display: 'flex', 
           alignItems: 'center', 
           justifyContent: 'center',
-          zIndex: 1000
+          zIndex: 1100
         }}>
           <motion.div 
             initial={{ scale: 0.9, opacity: 0, y: 20 }}
@@ -2807,7 +2892,7 @@ const Dashboard: React.FC = () => {
                     top: '100%', 
                     left: 0, 
                     right: 0, 
-                    zIndex: 1000, 
+                    zIndex: 1100, 
                     marginTop: '0.25rem',
                     maxHeight: '200px',
                     overflowY: 'auto',
@@ -3054,7 +3139,7 @@ const Dashboard: React.FC = () => {
                     top: '100%', 
                     left: 0, 
                     right: 0, 
-                    zIndex: 1000, 
+                    zIndex: 1100, 
                     marginTop: '0.25rem',
                     maxHeight: '200px',
                     overflowY: 'auto',
@@ -3152,7 +3237,7 @@ const Dashboard: React.FC = () => {
                     top: '100%', 
                     left: 0, 
                     right: 0, 
-                    zIndex: 1000, 
+                    zIndex: 1100, 
                     marginTop: '0.25rem',
                     maxHeight: '200px',
                     overflowY: 'auto',
