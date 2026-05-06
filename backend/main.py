@@ -1919,24 +1919,32 @@ def sync_email_traffic(db: Session):
         qids_seen = set()
         
         try:
-            # We check the last 5000 lines for the sync
-            result = subprocess.run(['tail', '-n', '5000', target_log], capture_output=True, text=True)
+            # We check the last 10000 lines for the sync
+            result = subprocess.run(['tail', '-n', '10000', target_log], capture_output=True, text=True)
             lines = result.stdout.splitlines()
         except:
             with open(target_log, 'r', errors='ignore') as f:
-                lines = f.readlines()[-5000:]
+                lines = f.readlines()[-10000:]
                 
+        outgoing_qids = set()
+        
         for line in lines:
-            if "status=sent" in line:
-                match = re.search(r'([A-F0-9]{10,12}):', line)
-                if match:
-                    qid = match.group(1)
+            match = re.search(r'([A-F0-9]{10,15}):', line)
+            if match:
+                qid = match.group(1)
+                
+                if "sasl_username=" in line or "client=localhost" in line or "client=127.0.0.1" in line:
+                    outgoing_qids.add(qid)
+                    
+                if "status=sent" in line:
                     if qid not in qids_seen:
                         qids_seen.add(qid)
-                        if "sasl_username=" in line or "relay=127.0.0.1" in line:
+                        if qid in outgoing_qids:
                             sent_today += 1
                         elif any(r in line for r in ["relay=local", "relay=virtual", "relay=lmtp", "relay=dovecot"]):
                             received_today += 1
+                            
+        print(f"DEBUG SYNC: Parsed {len(lines)} lines from {target_log}. Found {sent_today} sent, {received_today} received.")
                             
         traffic = db.query(models.EmailTraffic).filter(models.EmailTraffic.date == today).first()
         if not traffic:
