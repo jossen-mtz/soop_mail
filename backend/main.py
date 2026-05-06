@@ -2030,19 +2030,36 @@ async def get_mail_traffic(
     total_received = 0
     peak_day_total = 0
     
-    for t in history_objs:
-        history.append({
-            "date": t.date.strftime("%Y-%m-%d"),
-            "sent": t.sent_count,
-            "received": t.received_count,
-            "total": t.sent_count + t.received_count
-        })
-        total_sent += t.sent_count
-        total_received += t.received_count
-        if (t.sent_count + t.received_count) > peak_day_total:
-            peak_day_total = t.sent_count + t.received_count
+    from datetime import timedelta
+    today_dt = datetime.utcnow().replace(hour=0, minute=0, second=0, microsecond=0)
+    history_map = {t.date.strftime("%Y-%m-%d"): t for t in history_objs}
+    
+    for i in range(days - 1, -1, -1):
+        d = today_dt - timedelta(days=i)
+        d_str = d.strftime("%Y-%m-%d")
+        
+        if d_str in history_map:
+            t = history_map[d_str]
+            sent = t.sent_count
+            received = t.received_count
+        else:
+            sent = 0
+            received = 0
             
-    num_days = len(history) if len(history) > 0 else 1
+        total = sent + received
+        history.append({
+            "date": d_str,
+            "sent": sent,
+            "received": received,
+            "total": total
+        })
+        
+        total_sent += sent
+        total_received += received
+        if total > peak_day_total:
+            peak_day_total = total
+            
+    num_days = days
     
     return {
         "history": history,

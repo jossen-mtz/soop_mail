@@ -1517,8 +1517,8 @@ const Dashboard: React.FC = () => {
                       <p style={{ color: '#64748b', fontSize: '0.875rem' }}>Administra tu información personal y configuración de acceso.</p>
                     </div>
                     
-                    <div className="grid-2-cols" style={{ display: 'grid', gap: '2.5rem' }}>
-                      <div style={{ borderRight: '1px solid #f1f5f9', paddingRight: '2.5rem' }}>
+                    <div className="grid-2-cols">
+                      <div className="profile-left-col">
                         <h4 style={{ fontSize: '1rem', fontWeight: '700', color: '#1e293b', marginBottom: '1.5rem', display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
                           <Users size={18} style={{ color: '#4f46e5' }} />
                           Datos Personales

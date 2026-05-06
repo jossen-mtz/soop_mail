@@ -216,6 +216,17 @@ tr:hover td {
   gap: 1.5rem;
 }
 
+.grid-2-cols {
+  display: grid;
+  grid-template-columns: repeat(2, 1fr);
+  gap: 2.5rem;
+}
+
+.profile-left-col {
+  border-right: 1px solid var(--border);
+  padding-right: 2.5rem;
+}
+
 .table-container {
   width: 100%;
   overflow-x: auto;
@@ -341,6 +352,13 @@ tr:hover td {
   .grid-2-cols {
     grid-template-columns: 1fr !important;
     gap: 1rem !important;
+  }
+
+  .profile-left-col {
+    border-right: none;
+    border-bottom: 1px solid var(--border);
+    padding-right: 0;
+    padding-bottom: 2.5rem;
   }
 
   .settings-tabs {
