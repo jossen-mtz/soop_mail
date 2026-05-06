@@ -1948,6 +1948,7 @@ def sync_email_traffic(db: Session):
         
         db.commit()
     except Exception as e:
+        db.rollback()
         print(f"Error syncing traffic: {str(e)}")
 
 @app.get("/api/mail/traffic", response_model=schemas.TrafficStatsResponse)

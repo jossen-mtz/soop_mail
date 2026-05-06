@@ -73,3 +73,4 @@ class EmailTraffic(Base):
     date = Column(DateTime, unique=True, index=True)
     sent_count = Column(Integer, default=0)
     received_count = Column(Integer, default=0)
+    created_at = Column(DateTime, default=datetime.utcnow, nullable=False)
