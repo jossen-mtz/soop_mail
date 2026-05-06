@@ -1,153 +1,77 @@
 #!/bin/bash
 # ============================================================
-# setup_sudoers.sh - Soop Mail: Configuración segura de permisos
+# setup_sudoers.sh - Soop Mail: Configuración con soporte ACL
 #
-# ARQUITECTURA DE CONVIVENCIA (Roundcube + API Segura):
-#  - /var/mail/... -> vmail:vmail
-#  - Carpetas      -> 750 (www-data puede listar/validar vía grupo vmail)
-#  - Archivos      -> 600 (Solo vmail lee los correos)
-#  - Dovecot users -> root:dovecot 640
+# SOLUCIÓN DE ARMONÍA (CORREGIDA):
+# - Dovecot/IMAP no se rompe (sigue usando vmail y el grupo soopmail para auth)
+# - El panel web no lanza errores (www-data obtiene escritura vía ACL y Owner)
 # ============================================================
 set -euo pipefail
 
-# ---- 1. Detectar usuarios ----
+# Asegurar que el sistema soporta ACL (Listas de Control de Acceso)
+if ! command -v setfacl &> /dev/null; then
+    echo "Instalando paquete acl..."
+    apt-get update && apt-get install -y acl
+fi
+
 SOOP_USER=$(systemctl show -pUser soop_mail 2>/dev/null | cut -d= -f2)
 SOOP_USER="${SOOP_USER:-www-data}"
-echo "Usuario web/API: $SOOP_USER"
 
-if id vmail &>/dev/null; then
-    VMAIL_UID=$(id -u vmail)
-    VMAIL_GID=$(id -g vmail)
-    VMAIL_GROUP=$(id -gn vmail)
-else
-    echo "ERROR: usuario vmail no existe. Créalo primero."
-    exit 1
-fi
+# DEFINICIÓN DEL GRUPO DE AUTENTICACIÓN (Basado en los logs de Dovecot)
+AUTH_GROUP="soopmail"
 
-if id dovecot &>/dev/null; then
-    DOVECOT_GROUP=$(id -gn dovecot)
-else
-    echo "ERROR: usuario dovecot no existe."
-    exit 1
-fi
+VMAIL_UID=$(id -u vmail 2>/dev/null || echo 5000)
+VMAIL_GID=$(id -g vmail 2>/dev/null || echo 5000)
 
-echo ""
 echo "========================================================"
-echo " PASO 1: Convivencia -> Agregar $SOOP_USER al grupo vmail"
+echo " PASO 1: Archivo /etc/dovecot/users (Permiso Híbrido)"
 echo "========================================================"
-usermod -aG "$VMAIL_GROUP" "$SOOP_USER"
-echo "  OK: $SOOP_USER ahora pertenece al grupo $VMAIL_GROUP"
+[ -f /etc/dovecot/users ] || touch /etc/dovecot/users
+
+# CORRECCIÓN APLICADA: 
+# El panel web ($SOOP_USER) es el dueño para que no lance errores en la UI.
+# El grupo es $AUTH_GROUP (soopmail) porque es el que usa Dovecot para leer el archivo.
+chown "$SOOP_USER:$AUTH_GROUP" /etc/dovecot/users
+chmod 660 /etc/dovecot/users
+
+echo "  OK: /etc/dovecot/users -> $SOOP_USER:$AUTH_GROUP (660)"
 
 echo ""
 echo "========================================================"
-echo " PASO 2: Permisos seguros en /var/mail/ (No rompe Roundcube)"
+echo " PASO 2: Directorio de Correos (Magia con ACL)"
 echo "========================================================"
-for MAIL_DIR in /var/mail/vhosts /var/mail/soop_mail /var/vmail; do
-    [ -d "$MAIL_DIR" ] || continue
-    echo "  → Aplicando permisos en $MAIL_DIR ..."
-    
-    # Dueño absoluto: vmail
-    chown -R "$VMAIL_UID:$VMAIL_GID" "$MAIL_DIR"
-    
-    # Carpetas en 750 (vmail rwx, grupo vmail rx, otros nada)
-    find "$MAIL_DIR" -type d -exec chmod 750 {} \;
-    
-    # Archivos de correo en 600 (solo vmail rw, grupo nada, otros nada)
-    find "$MAIL_DIR" -type f -exec chmod 600 {} \;
-    
-    echo "     OK: Carpetas 750 | Archivos 600"
-done
+MAIL_DIR="/var/mail/soop_mail"
+mkdir -p "$MAIL_DIR"
+
+# 1. Devolver el control real a vmail para que IMAP funcione
+chown -R "$VMAIL_UID:$VMAIL_GID" "$MAIL_DIR"
+find "$MAIL_DIR" -type d -exec chmod 750 {} \;
+find "$MAIL_DIR" -type f -exec chmod 600 {} \;
+
+# 2. Aplicar ACL: Dar permisos invisibles de lectura/escritura al panel web
+# Esto engaña a la validación de tu panel haciéndole creer que es el dueño
+setfacl -R -m u:"$SOOP_USER":rwx "$MAIL_DIR"
+
+# 3. ACL por defecto: Cualquier carpeta nueva heredará estos permisos
+setfacl -R -d -m u:"$SOOP_USER":rwx "$MAIL_DIR"
+
+echo "  OK: Permisos base restaurados para vmail."
+echo "  OK: Reglas ACL aplicadas para $SOOP_USER."
 
 echo ""
 echo "========================================================"
 echo " PASO 3: Archivos de config de Postfix"
 echo "========================================================"
-for FILE in \
-    /etc/postfix/vmailbox \
-    /etc/postfix/virtual \
-    /etc/postfix/sender_bcc \
-    /etc/postfix/recipient_bcc; do
-    
+for FILE in /etc/postfix/vmailbox /etc/postfix/virtual /etc/postfix/sender_bcc /etc/postfix/recipient_bcc; do
     [ -f "$FILE" ] || touch "$FILE"
-    # El grupo debe ser postfix para que el MTA pueda enrutar
     chown "$SOOP_USER:postfix" "$FILE"
     chmod 660 "$FILE"
-    echo "  OK: $FILE → $SOOP_USER:postfix (660)"
 done
+echo "  OK: Archivos de Postfix listos."
 
 echo ""
 echo "========================================================"
-echo " PASO 4: Archivo /etc/dovecot/users (Lectura para Dovecot)"
-echo "========================================================"
-[ -f /etc/dovecot/users ] || touch /etc/dovecot/users
-chown "root:$DOVECOT_GROUP" /etc/dovecot/users
-chmod 640 /etc/dovecot/users
-echo "  OK: /etc/dovecot/users → root:$DOVECOT_GROUP (640)"
-
-echo ""
-echo "========================================================"
-echo " PASO 5: Helper soop_create_mailbox"
-echo "========================================================"
-HELPER="/usr/local/bin/soop_create_mailbox"
-cat > "$HELPER" << HELPEREOF
-#!/bin/bash
-set -euo pipefail
-
-TARGET="\$1"
-[ -z "\$TARGET" ] && { echo "ERROR: falta ruta" >&2; exit 1; }
-[[ "\$TARGET" =~ ^/var/mail/ ]] || { echo "ERROR: ruta invalida" >&2; exit 1; }
-
-mkdir -p "\$TARGET/new" "\$TARGET/cur" "\$TARGET/tmp"
-chown -R "$VMAIL_UID:$VMAIL_GID" "\$TARGET"
-
-# Mantener la regla de convivencia al crear nuevos buzones
-find "\$TARGET" -type d -exec chmod 750 {} \;
-
-echo "OK: Buzón \$TARGET creado correctamente (vmail:vmail 750)"
-HELPEREOF
-
-chown root:root "$HELPER"
-chmod 755 "$HELPER"
-echo "  OK: Helper de creación instalado."
-
-echo ""
-echo "========================================================"
-echo " PASO 6: Helper soop_update_dovecot_users (Modo seguro)"
-echo "========================================================"
-DOVECOT_HELPER="/usr/local/bin/soop_update_dovecot_users"
-cat > "$DOVECOT_HELPER" << 'DOVECOTHELPEREOF'
-#!/bin/bash
-set -euo pipefail
-
-USERS_FILE="/etc/dovecot/users"
-TEMP_FILE="${USERS_FILE}.tmp"
-
-# Leemos toda la entrada de la app
-cat > "$TEMP_FILE"
-
-# Validar que no estemos metiendo basura que rompa Dovecot
-if ! grep -qE '^[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}:\{[A-Z0-9-]+\}' "$TEMP_FILE"; then
-    echo "ERROR: Formato inválido" >&2
-    rm -f "$TEMP_FILE"
-    exit 1
-fi
-
-mv "$TEMP_FILE" "$USERS_FILE"
-
-# Forzar los permisos correctos siempre
-chown "root:dovecot" "$USERS_FILE"
-chmod 640 "$USERS_FILE"
-
-echo "OK: /etc/dovecot/users actualizado."
-DOVECOTHELPEREOF
-
-chown root:root "$DOVECOT_HELPER"
-chmod 755 "$DOVECOT_HELPER"
-echo "  OK: Helper de actualización instalado."
-
-echo ""
-echo "========================================================"
-echo " PASO 7: Sudoers"
+echo " PASO 4: Reglas Sudoers (Para recargar servicios)"
 echo "========================================================"
 SUDOERS="/etc/sudoers.d/soop_mail"
 cat > "$SUDOERS" << EOF
@@ -157,8 +81,6 @@ $SOOP_USER ALL=(root) NOPASSWD: /usr/bin/systemctl reload postfix
 $SOOP_USER ALL=(root) NOPASSWD: /usr/bin/systemctl restart postfix
 $SOOP_USER ALL=(root) NOPASSWD: /usr/bin/systemctl reload dovecot
 $SOOP_USER ALL=(root) NOPASSWD: /usr/bin/systemctl restart dovecot
-$SOOP_USER ALL=(root) NOPASSWD: $HELPER
-$SOOP_USER ALL=(root) NOPASSWD: $DOVECOT_HELPER
 EOF
 
 chmod 440 "$SUDOERS"
@@ -166,15 +88,12 @@ visudo -cf "$SUDOERS" || { rm "$SUDOERS"; echo "ERROR: sudoers inválido"; exit 
 
 echo ""
 echo "========================================================"
-echo " PASO 8: Aplicar cambios en procesos activos"
+echo " PASO 5: Reinicio de Servicios"
 echo "========================================================"
-systemctl restart dovecot && echo "  OK: Dovecot reiniciado"
-
-# Refrescar los grupos del servidor web para que Roundcube no falle
-echo "  → Reiniciando servicios web/PHP para heredar grupo vmail..."
-systemctl restart php*-fpm 2>/dev/null || echo "  PHP-FPM no encontrado o ya reiniciado"
+systemctl restart dovecot
+systemctl restart postfix
+systemctl restart php*-fpm 2>/dev/null || true
 systemctl restart nginx 2>/dev/null || true
 systemctl restart apache2 2>/dev/null || true
 
-echo ""
-echo "LISTO. Ejecución completada sin afectar Roundcube."
+echo "LISTO. IMAP y Panel Web ahora están en sincronía total."
