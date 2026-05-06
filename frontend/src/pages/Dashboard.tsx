@@ -1326,7 +1326,7 @@ const Dashboard: React.FC = () => {
                       <Legend verticalAlign="top" height={40} iconType="circle" />
                       <Area 
                         type="monotone" 
-                        dataKey="sent_count" 
+                        dataKey="sent" 
                         name="Enviados"
                         stroke="#4f46e5" 
                         strokeWidth={3}
@@ -1335,7 +1335,7 @@ const Dashboard: React.FC = () => {
                       />
                       <Area 
                         type="monotone" 
-                        dataKey="received_count" 
+                        dataKey="received" 
                         name="Recibidos"
                         stroke="#10b981" 
                         strokeWidth={3}
@@ -1370,8 +1370,8 @@ const Dashboard: React.FC = () => {
                     {trafficStats?.history.slice().reverse().map((day: any) => (
                       <tr key={day.date}>
                         <td style={{ fontWeight: '600' }}>{format(new Date(day.date), 'dd/MM/yyyy')}</td>
-                        <td style={{ color: '#4f46e5', fontWeight: '700' }}>{day.sent_count}</td>
-                        <td style={{ color: '#10b981', fontWeight: '700' }}>{day.received_count}</td>
+                        <td style={{ color: '#4f46e5', fontWeight: '700' }}>{day.sent}</td>
+                        <td style={{ color: '#10b981', fontWeight: '700' }}>{day.received}</td>
                         <td style={{ fontWeight: '800' }}>{day.total}</td>
                       </tr>
                     ))}
