@@ -820,6 +820,9 @@ async def get_system_diagnostics(current_user: models.User = Depends(auth.get_cu
         ("Directorio de Correos (MAIL_BASE)", MAIL_BASE)
     ]
     
+    import getpass
+    current_os_user = getpass.getuser()
+    
     # We will output suggested fixes for the frontend
     for label, path in paths_to_check:
         if not path:
@@ -836,14 +839,14 @@ async def get_system_diagnostics(current_user: models.User = Depends(auth.get_cu
                     "path": path,
                     "label": label,
                     "error": "El directorio padre no existe",
-                    "fix_command": f"sudo mkdir -p {parent_dir} && sudo chown -R $USER:$USER {parent_dir}"
+                    "fix_command": f"sudo mkdir -p {parent_dir} && sudo chown -R {current_os_user}:{current_os_user} {parent_dir}"
                 })
             elif not os.access(parent_dir, os.W_OK):
                 issues.append({
                     "path": path,
                     "label": label,
                     "error": "El sistema no tiene permisos de escritura en el directorio padre para crear el archivo",
-                    "fix_command": f"sudo chown -R $USER:$USER {parent_dir}"
+                    "fix_command": f"sudo chown -R {current_os_user}:{current_os_user} {parent_dir}"
                 })
         else:
             # Check read and write permissions
@@ -852,14 +855,14 @@ async def get_system_diagnostics(current_user: models.User = Depends(auth.get_cu
                     "path": path,
                     "label": label,
                     "error": "Sin permisos de lectura",
-                    "fix_command": f"sudo chmod +r {path} && sudo chown -R $USER:$USER {path}"
+                    "fix_command": f"sudo chmod +r {path} && sudo chown -R {current_os_user}:{current_os_user} {path}"
                 })
             elif not os.access(path, os.W_OK):
                 issues.append({
                     "path": path,
                     "label": label,
                     "error": "Sin permisos de escritura (requerido para crear buzones/alias)",
-                    "fix_command": f"sudo chmod +w {path} && sudo chown -R $USER:$USER {path}"
+                    "fix_command": f"sudo chmod +w {path} && sudo chown -R {current_os_user}:{current_os_user} {path}"
                 })
                 
     if not issues:
