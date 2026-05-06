@@ -4,17 +4,18 @@
 #
 # Ejecutar como root: sudo bash scripts/setup_sudoers.sh
 #
-# ARQUITECTURA DE PERMISOS (no se modifica nada más):
+# ARQUITECTURA DE PERMISOS:
 #
-#  /var/mail/vhosts/           → vmail:vmail  700  (solo Dovecot)
-#  /var/mail/vhosts/domain/    → vmail:vmail  700  (solo Dovecot)
-#  /var/mail/vhosts/domain/u/  → vmail:vmail  700  (solo Dovecot)
+#  /var/mail/soop_mail/        → vmail:vmail  750  (vmail escribe, www-data lee via grupo)
+#  /var/mail/soop_mail/domain/ → vmail:vmail  750  (ídem)
+#  /var/mail/soop_mail/domain/u/→ vmail:vmail  700  (solo Dovecot, buzones privados)
 #
 #  /etc/postfix/vmailbox       → root:www-data 660  (Postfix lee, app escribe)
 #  /etc/dovecot/users          → root:www-data 660  (Dovecot lee, app escribe)
 #
-#  www-data NUNCA toca /var/mail/ directamente.
-#  Para crear un nuevo buzón, usa: sudo /usr/local/bin/soop_create_mailbox
+#  www-data NUNCA escribe en /var/mail/ directamente.
+#  Solo puede LEER el directorio raíz y de dominio (para validación).
+#  Para crear un nuevo buzón usa: sudo /usr/local/bin/soop_create_mailbox
 #  Ese helper corre como root y crea el dir con vmail:vmail 700.
 # ============================================================
 
@@ -39,22 +40,45 @@ echo "vmail: UID=$VMAIL_UID GID=$VMAIL_GID grupo=$VMAIL_GROUP"
 
 echo ""
 echo "========================================================"
-echo " PASO 1: Restaurar /var/mail/ a vmail:vmail"
-echo " (Repara daños de scripts anteriores. Solo ownership/perms)"
+echo " PASO 1: Agregar $SOOP_USER al grupo vmail"
+echo " (permite lectura de /var/mail/ sin dar escritura)"
+echo "========================================================"
+
+usermod -aG "$VMAIL_GROUP" "$SOOP_USER"
+echo "  OK: $SOOP_USER agregado al grupo $VMAIL_GROUP"
+
+echo ""
+echo "========================================================"
+echo " PASO 2: Restaurar /var/mail/ a vmail:vmail"
+echo " Directorios raíz y dominio: 750 (grupo puede leer)"
+echo " Buzones individuales:        700 (solo vmail/Dovecot)"
 echo "========================================================"
 
 for MAIL_DIR in /var/mail/vhosts /var/mail/soop_mail /var/vmail; do
     [ -d "$MAIL_DIR" ] || continue
     echo "  → Restaurando $MAIL_DIR ..."
+
+    # Owner siempre vmail
     chown -R "$VMAIL_UID:$VMAIL_GID" "$MAIL_DIR"
-    find "$MAIL_DIR" -type d -exec chmod 700 {} \;
+
+    # Archivos: solo vmail (600)
     find "$MAIL_DIR" -type f -exec chmod 600 {} \;
-    echo "     OK: $MAIL_DIR → vmail:vmail (dirs:700, files:600)"
+
+    # Todos los directorios: 700 por defecto
+    find "$MAIL_DIR" -type d -exec chmod 700 {} \;
+
+    # Directorio raíz y primer nivel (dominio): 750 para que www-data pueda leer
+    chmod 750 "$MAIL_DIR"
+    for DOMAIN_DIR in "$MAIL_DIR"/*/; do
+        [ -d "$DOMAIN_DIR" ] && chmod 750 "$DOMAIN_DIR"
+    done
+
+    echo "     OK: $MAIL_DIR → vmail:vmail (raíz/dominio:750, buzones:700, files:600)"
 done
 
 echo ""
 echo "========================================================"
-echo " PASO 2: Archivos de config de Postfix y Dovecot"
+echo " PASO 3: Archivos de config de Postfix y Dovecot"
 echo " www-data puede ESCRIBIR estos archivos, no /var/mail/"
 echo "========================================================"
 
@@ -77,17 +101,17 @@ fi
 
 echo ""
 echo "========================================================"
-echo " PASO 3: Instalar helper /usr/local/bin/soop_create_mailbox"
+echo " PASO 4: Instalar helper /usr/local/bin/soop_create_mailbox"
 echo " www-data llama a este script via sudo para crear maildirs"
-echo " El script crea dirs con vmail:vmail sin tocar lo existente"
+echo " El script crea dirs con vmail:vmail 700 (buzón privado)"
+echo " mail_location = maildir:/var/mail/vhosts/%d/%n"
 echo "========================================================"
 
 HELPER="/usr/local/bin/soop_create_mailbox"
 cat > "$HELPER" << HELPEREOF
 #!/bin/bash
 # soop_create_mailbox - Crea un Maildir con ownership vmail:vmail
-# Uso: sudo $HELPER /var/mail/vhosts/domain/usuario
-# mail_location = maildir:/var/mail/vhosts/%d/%n  (sin subcarpeta Maildir/)
+# Uso: sudo $HELPER /var/mail/soop_mail/domain/usuario
 set -euo pipefail
 
 TARGET="\$1"
@@ -97,6 +121,8 @@ TARGET="\$1"
 VMAIL_UID=$VMAIL_UID
 VMAIL_GID=$VMAIL_GID
 
+# Crear estructura Maildir sin subcarpeta extra
+# (mail_location = maildir:/var/mail/vhosts/%d/%n)
 mkdir -p "\$TARGET/new" "\$TARGET/cur" "\$TARGET/tmp"
 chown -R "\$VMAIL_UID:\$VMAIL_GID" "\$TARGET"
 chmod -R 700 "\$TARGET"
@@ -109,14 +135,14 @@ echo "  OK: $HELPER instalado"
 
 echo ""
 echo "========================================================"
-echo " PASO 4: Reglas sudoers para $SOOP_USER"
+echo " PASO 5: Reglas sudoers para $SOOP_USER"
 echo "========================================================"
 
 SUDOERS="/etc/sudoers.d/soop_mail"
 cat > "$SUDOERS" << EOF
 # Soop Mail sudoers - $(date)
 # $SOOP_USER puede ejecutar comandos de correo SIN contraseña.
-# NO se otorgan permisos sobre /var/mail/ directamente.
+# NO se otorgan permisos de escritura sobre /var/mail/ directamente.
 
 # Indexar mapas de Postfix
 $SOOP_USER ALL=(root) NOPASSWD: /usr/sbin/postmap
@@ -139,18 +165,25 @@ visudo -cf "$SUDOERS" && echo "  OK: $SUDOERS validado" || { rm "$SUDOERS"; echo
 
 echo ""
 echo "========================================================"
-echo " PASO 5: Reiniciar soop_mail"
+echo " PASO 6: Reiniciar servicios"
 echo "========================================================"
-systemctl restart soop_mail && echo "  OK: servicio reiniciado"
+systemctl restart dovecot && echo "  OK: dovecot reiniciado"
+systemctl restart soop_mail && echo "  OK: soop_mail reiniciado"
 
 echo ""
 echo "========================================================"
 echo " VERIFICACIÓN FINAL"
 echo "========================================================"
-echo "  Propietarios /var/mail/:"
+echo "  Grupos de $SOOP_USER:"
+groups "$SOOP_USER"
+echo ""
+echo "  Permisos /var/mail/:"
 ls -la /var/mail/ 2>/dev/null || true
 echo ""
-echo "  Propietarios /etc/postfix/vmailbox:"
+echo "  Permisos /var/mail/soop_mail/:"
+ls -la /var/mail/soop_mail/ 2>/dev/null || true
+echo ""
+echo "  Permisos /etc/postfix/vmailbox:"
 ls -la /etc/postfix/vmailbox 2>/dev/null || true
 echo ""
 echo " LISTO. Dovecot y Roundcube no fueron afectados."
