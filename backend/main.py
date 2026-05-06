@@ -304,13 +304,13 @@ def _ensure_postfix_config():
                 # If the expected value is not in current, we append it or set it
                 if not current:
                     print(f"INFO: Setting {param} to {expected}")
-                    subprocess.run(['postconf', '-e', f"{param} = {expected}"], check=True)
+                    _run_privileged(['postconf', '-e', f"{param} = {expected}"], f"postconf set {param}")
                     changed = True
                 elif expected not in current:
                     # Append it if it's not there (comma separated)
                     new_value = f"{current}, {expected}"
                     print(f"INFO: Updating {param} to {new_value}")
-                    subprocess.run(['postconf', '-e', f"{param} = {new_value}"], check=True)
+                    _run_privileged(['postconf', '-e', f"{param} = {new_value}"], f"postconf update {param}")
                     changed = True
             except Exception as e:
                 print(f"WARNING: Could not check/set {param}: {str(e)}")
@@ -321,19 +321,16 @@ def _ensure_postfix_config():
                 print(f"INFO: Creating missing Postfix map file: {fpath}")
                 try:
                     os.makedirs(os.path.dirname(fpath), exist_ok=True)
-                    with open(fpath, 'w') as f:
-                        f.write(f"# Postfix map file: {os.path.basename(fpath)}\n")
-                    subprocess.run(['postmap', fpath], check=True)
-                    changed = True
+                    ok, _ = _write_privileged(fpath, f"# Postfix map file: {os.path.basename(fpath)}\n")
+                    if ok:
+                        _run_privileged(['postmap', fpath], f"postmap {os.path.basename(fpath)}")
+                        changed = True
                 except Exception as e:
                     print(f"ERROR: Could not create/index {fpath}: {str(e)}")
 
         if changed:
             print("INFO: Reloading Postfix to apply changes")
-            try:
-                subprocess.run(['postfix', 'reload'], check=True)
-            except:
-                subprocess.run(['systemctl', 'reload', 'postfix'], check=True)
+            _reload_postfix()
 
     except Exception as e:
         print(f"ERROR: General failure in _ensure_postfix_config: {str(e)}")
@@ -784,11 +781,8 @@ def write_virtual_file(entries):
         
         # postmap & reload
         if os.name != 'nt':
-            try:
-                subprocess.run(['postmap', VIRTUAL_MAP], check=True, capture_output=True, text=True)
-                subprocess.run(['postfix', 'reload'], check=True, capture_output=True, text=True)
-            except subprocess.CalledProcessError as e:
-                print(f"Error executing postfix commands: {str(e)}")
+            _run_privileged(['postmap', VIRTUAL_MAP], "postmap virtual")
+            _reload_postfix()
         return True
     except Exception as e:
         print(f"Error writing virtual file: {str(e)}")
@@ -1549,11 +1543,8 @@ def _write_map_file(path, content):
             
         # Postmap if not on Windows
         if os.name != 'nt':
-            try:
-                subprocess.run(['postmap', path], check=True)
-                subprocess.run(['postfix', 'reload'], check=True)
-            except subprocess.CalledProcessError as e:
-                print(f"Error executing postmap/reload for {path}: {str(e)}")
+            _run_privileged(['postmap', path], f"postmap {os.path.basename(path)}")
+            _reload_postfix()
     except Exception as e:
         print(f"ERROR: Could not write map file {path}: {str(e)}")
         # If writing to /etc fails, try a fallback in the project dir for diagnostics
