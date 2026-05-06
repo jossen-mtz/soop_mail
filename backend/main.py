@@ -1334,20 +1334,31 @@ async def create_mail_user(
     username = user_data.email.split('@')[0]
     # Path following the user script: MAIL_BASE/domain/username
     user_home = os.path.join(MAIL_BASE, domain, username)
-    maildir_path = os.path.join(user_home, "Maildir")
+    # Create Maildir using the privileged helper script.
+    # The helper (installed at /usr/local/bin/soop_create_mailbox) creates
+    # the directory structure with vmail:vmail ownership from the start,
+    # without touching any existing directories.
+    HELPER_SCRIPT = "/usr/local/bin/soop_create_mailbox"
     
-    # Create directory logic: Maildir/{new,cur,tmp}
     try:
-        for d in ['new', 'cur', 'tmp']:
-            os.makedirs(os.path.join(maildir_path, d), exist_ok=True)
-            
-        if os.name != 'nt':
-            # chown -R vmail:vmail (try direct first, then sudo)
-            ok1, _ = _run_privileged(['chown', '-R', f"{VMAIL_UID}:{VMAIL_GID}", user_home], "chown maildir")
-            ok2, _ = _run_privileged(['chmod', '-R', '700', user_home], "chmod maildir")
-            if not ok1:
-                print(f"WARNING: Could not set ownership of {user_home} to {VMAIL_UID}:{VMAIL_GID}")
-                print(f"HINT: Run: sudo chown -R {VMAIL_UID}:{VMAIL_GID} {user_home}")
+        if os.name != 'nt' and os.path.exists(HELPER_SCRIPT):
+            # Use the dedicated helper script (runs as root via sudoers)
+            ok, err = _run_privileged([HELPER_SCRIPT, user_home], "create mailbox")
+            if not ok:
+                print(f"WARNING: Helper script failed: {err}")
+                print(f"HINT: Install helper with: sudo bash scripts/setup_sudoers.sh")
+                # Fallback: try to create dirs directly (may have wrong ownership)
+                for d in ['new', 'cur', 'tmp']:
+                    os.makedirs(os.path.join(user_home, "Maildir", d), exist_ok=True)
+        else:
+            # Windows dev mode or helper not installed: create dirs directly
+            maildir_path = os.path.join(user_home, "Maildir")
+            for d in ['new', 'cur', 'tmp']:
+                os.makedirs(os.path.join(maildir_path, d), exist_ok=True)
+            if os.name != 'nt':
+                print(f"WARNING: Helper script not found at {HELPER_SCRIPT}")
+                print(f"WARNING: Maildir created as www-data, Dovecot may not be able to read it.")
+                print(f"HINT: Install helper with: sudo bash scripts/setup_sudoers.sh")
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Error creating mail directory: {str(e)}")
     
