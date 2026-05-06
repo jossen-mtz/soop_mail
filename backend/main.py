@@ -988,6 +988,139 @@ async def export_mailbox(
         cleanup_file(temp_path)
         raise HTTPException(status_code=500, detail=f"Error exporting mailbox: {str(e)}")
 
+@app.get("/api/mail/users/{email}/export/data")
+async def export_mailbox_data(
+    email: str,
+    background_tasks: BackgroundTasks,
+    request: Request,
+    db: Session = Depends(get_db),
+    current_user: models.User = Depends(auth.get_current_active_user)
+):
+    users = read_users_file()
+    user = next((u for u in users if u['email'] == email), None)
+    if not user:
+        raise HTTPException(status_code=404, detail="Mailbox not found")
+        
+    aliases = read_virtual_file()
+    user_aliases = [a for a in aliases if a['email'] == email]
+    
+    responder = db.query(models.AutoResponder).filter(models.AutoResponder.email == email).first()
+    
+    sender_bcc = read_bcc_rules("sender")
+    recipient_bcc = read_bcc_rules("recipient")
+    
+    export_data = {
+        "user_info": user,
+        "aliases_and_forwards": user_aliases,
+        "auto_responder": {
+            "active": responder.active,
+            "subject": responder.subject,
+            "body": responder.body
+        } if responder else None,
+        "bcc_rules": {
+            "sender": [r for r in sender_bcc if r['email'] == email],
+            "recipient": [r for r in recipient_bcc if r['email'] == email]
+        },
+        "exported_at": datetime.now().isoformat()
+    }
+    
+    import tempfile
+    import json
+    
+    fd, temp_path = tempfile.mkstemp(suffix='.json')
+    os.close(fd)
+    
+    try:
+        with open(temp_path, 'w', encoding='utf-8') as f:
+            json.dump(export_data, f, indent=4, ensure_ascii=False)
+            
+        background_tasks.add_task(cleanup_file, temp_path)
+        log_audit(db, current_user.id, "EXPORT_DATA", "MailUser", email, f"Exported structured data for {email}", request=request)
+        
+        return FileResponse(
+            path=temp_path,
+            filename=f"datos_{email}.json",
+            media_type="application/json"
+        )
+    except Exception as e:
+        cleanup_file(temp_path)
+        raise HTTPException(status_code=500, detail=f"Error exporting data: {str(e)}")
+
+@app.get("/api/mail/users/{email}/export/pdf")
+async def export_mailbox_pdf(
+    email: str,
+    background_tasks: BackgroundTasks,
+    request: Request,
+    db: Session = Depends(get_db),
+    current_user: models.User = Depends(auth.get_current_active_user)
+):
+    users = read_users_file()
+    user = next((u for u in users if u['email'] == email), None)
+    if not user:
+        raise HTTPException(status_code=404, detail="Mailbox not found")
+        
+    total, new, size_bytes, mailbox_path = get_mailbox_stats(user['home'])
+    
+    import tempfile
+    
+    fd, temp_path = tempfile.mkstemp(suffix='.html')
+    os.close(fd)
+    
+    # We will generate an HTML file that can be easily printed to PDF
+    # Since we can't guarantee a PDF library is installed in the current environment
+    
+    html_content = f"""
+    <!DOCTYPE html>
+    <html lang="es">
+    <head>
+        <meta charset="UTF-8">
+        <title>Reporte de Buzón - {email}</title>
+        <style>
+            body {{ font-family: Arial, sans-serif; margin: 40px; color: #333; }}
+            h1 {{ color: #2c3e50; border-bottom: 2px solid #3498db; padding-bottom: 10px; }}
+            .stats-box {{ background: #f8f9fa; border: 1px solid #dee2e6; padding: 20px; border-radius: 5px; margin-top: 20px; }}
+            .stats-row {{ display: flex; justify-content: space-between; margin-bottom: 10px; border-bottom: 1px dashed #ccc; padding-bottom: 5px; }}
+            .footer {{ margin-top: 50px; font-size: 12px; color: #7f8c8d; text-align: center; }}
+        </style>
+    </head>
+    <body>
+        <h1>Reporte Oficial de Buzón</h1>
+        <div class="stats-box">
+            <div class="stats-row"><strong>Cuenta de Correo:</strong> <span>{email}</span></div>
+            <div class="stats-row"><strong>Estado:</strong> <span>{user.get('status', 'Activo')}</span></div>
+            <div class="stats-row"><strong>Departamento:</strong> <span>{user.get('department', 'No asignado')}</span></div>
+            <div class="stats-row"><strong>Total de Mensajes:</strong> <span>{total}</span></div>
+            <div class="stats-row"><strong>Mensajes Nuevos:</strong> <span>{new}</span></div>
+            <div class="stats-row"><strong>Espacio Utilizado:</strong> <span>{format_size(size_bytes)}</span></div>
+            <div class="stats-row"><strong>Fecha de Exportación:</strong> <span>{datetime.now().strftime('%d/%m/%Y %H:%M:%S')}</span></div>
+        </div>
+        <p style="margin-top: 30px;">
+            Este documento representa un extracto certificado del paquete de mensajes asociado al buzón <strong>{email}</strong>.
+            Puede imprimir este documento como PDF desde su navegador para mantener un registro formal.
+        </p>
+        <div class="footer">
+            Generado automáticamente por el Sistema de Administración Soop Mails.
+        </div>
+    </body>
+    </html>
+    """
+    
+    try:
+        with open(temp_path, 'w', encoding='utf-8') as f:
+            f.write(html_content)
+            
+        background_tasks.add_task(cleanup_file, temp_path)
+        log_audit(db, current_user.id, "EXPORT_PDF", "MailUser", email, f"Exported PDF report for {email}", request=request)
+        
+        return FileResponse(
+            path=temp_path,
+            filename=f"reporte_{email}.html",
+            media_type="text/html"
+        )
+    except Exception as e:
+        cleanup_file(temp_path)
+        raise HTTPException(status_code=500, detail=f"Error exporting PDF report: {str(e)}")
+
 @app.get("/api/mail/export-all")
 async def export_all_mailboxes(
     background_tasks: BackgroundTasks,
@@ -1933,8 +2066,6 @@ def sync_email_traffic(db: Session):
     today = datetime.utcnow().replace(hour=0, minute=0, second=0, microsecond=0)
     
     try:
-        sent_today = 0
-        received_today = 0
         qids_seen = set()
         
         try:
@@ -1946,11 +2077,35 @@ def sync_email_traffic(db: Session):
                 lines = f.readlines()[-10000:]
                 
         outgoing_qids = set()
+        daily_counts = {}
+        current_year = datetime.utcnow().year
         
         for line in lines:
             match = re.search(r'([A-F0-9]{10,15}):', line)
             if match:
                 qid = match.group(1)
+                
+                # Extract date from log line
+                line_date = None
+                iso_match = re.match(r'^(\d{4}-\d{2}-\d{2})T', line)
+                if iso_match:
+                    line_date = iso_match.group(1)
+                else:
+                    syslog_match = re.match(r'^([A-Z][a-z]{2}\s+\d+)\s+', line)
+                    if syslog_match:
+                        try:
+                            from datetime import timedelta
+                            dt = datetime.strptime(f"{syslog_match.group(1)} {current_year}", "%b %d %Y")
+                            if dt > datetime.utcnow() + timedelta(days=1):
+                                dt = dt.replace(year=current_year - 1)
+                            line_date = dt.strftime("%Y-%m-%d")
+                        except: pass
+                
+                if not line_date:
+                    line_date = today.strftime("%Y-%m-%d")
+                    
+                if line_date not in daily_counts:
+                    daily_counts[line_date] = {"sent": 0, "received": 0}
                 
                 if "sasl_username=" in line or "client=localhost" in line or "client=127.0.0.1" in line:
                     outgoing_qids.add(qid)
@@ -1959,19 +2114,21 @@ def sync_email_traffic(db: Session):
                     if qid not in qids_seen:
                         qids_seen.add(qid)
                         if qid in outgoing_qids:
-                            sent_today += 1
+                            daily_counts[line_date]["sent"] += 1
                         elif any(r in line for r in ["relay=local", "relay=virtual", "relay=lmtp", "relay=dovecot"]):
-                            received_today += 1
+                            daily_counts[line_date]["received"] += 1
                             
-        print(f"DEBUG SYNC: Parsed {len(lines)} lines from {target_log}. Found {sent_today} sent, {received_today} received.")
-                            
-        traffic = db.query(models.EmailTraffic).filter(models.EmailTraffic.date == today).first()
-        if not traffic:
-            traffic = models.EmailTraffic(date=today, sent_count=sent_today, received_count=received_today)
-            db.add(traffic)
-        else:
-            traffic.sent_count = max(traffic.sent_count, sent_today)
-            traffic.received_count = max(traffic.received_count, received_today)
+        print(f"DEBUG SYNC: Parsed {len(lines)} lines. Counts grouped by date: {daily_counts}")
+        
+        for date_str, counts in daily_counts.items():
+            dt = datetime.strptime(date_str, "%Y-%m-%d")
+            traffic = db.query(models.EmailTraffic).filter(models.EmailTraffic.date == dt).first()
+            if not traffic:
+                traffic = models.EmailTraffic(date=dt, sent_count=counts["sent"], received_count=counts["received"])
+                db.add(traffic)
+            else:
+                traffic.sent_count = max(traffic.sent_count, counts["sent"])
+                traffic.received_count = max(traffic.received_count, counts["received"])
         
         db.commit()
     except Exception as e:

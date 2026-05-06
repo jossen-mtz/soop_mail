@@ -125,6 +125,8 @@ const Dashboard: React.FC = () => {
     status: 'active',
     restart_soop_mail: true
   });
+  const [showExportModal, setShowExportModal] = useState(false);
+  const [exportTargetEmail, setExportTargetEmail] = useState<string>('');
   
   const activeTab = location.pathname === '/configuracion' ? 'settings' : 
                    location.pathname === '/estadisticas' ? 'stats' : 'users';
@@ -656,10 +658,53 @@ const Dashboard: React.FC = () => {
       document.body.appendChild(link);
       link.click();
       link.remove();
+      setShowExportModal(false);
       showNotification('Descarga iniciada', 'success');
     } catch (error) {
       console.error('Error exporting mailbox:', error);
       showNotification('Error al exportar buzón', 'error');
+    }
+  };
+
+  const handleExportPDF = async (email: string) => {
+    try {
+      showNotification('Generando PDF del paquete de mensajes...', 'success');
+      const response = await api.get(`/api/mail/users/${email}/export/pdf`, {
+        responseType: 'blob'
+      });
+      const url = window.URL.createObjectURL(new Blob([response.data]));
+      const link = document.createElement('a');
+      link.href = url;
+      const timestamp = new Date().toISOString().split('T')[0];
+      link.setAttribute('download', `paquete_mensajes_${email}_${timestamp}.html`);
+      document.body.appendChild(link);
+      link.click();
+      link.remove();
+      setShowExportModal(false);
+    } catch (error) {
+      console.error('Error exporting PDF:', error);
+      showNotification('Error al exportar a PDF', 'error');
+    }
+  };
+
+  const handleExportData = async (email: string) => {
+    try {
+      showNotification('Generando archivo de datos estructurados...', 'success');
+      const response = await api.get(`/api/mail/users/${email}/export/data`, {
+        responseType: 'blob'
+      });
+      const url = window.URL.createObjectURL(new Blob([response.data]));
+      const link = document.createElement('a');
+      link.href = url;
+      const timestamp = new Date().toISOString().split('T')[0];
+      link.setAttribute('download', `datos_${email}_${timestamp}.json`);
+      document.body.appendChild(link);
+      link.click();
+      link.remove();
+      setShowExportModal(false);
+    } catch (error) {
+      console.error('Error exporting Data:', error);
+      showNotification('Error al exportar datos', 'error');
     }
   };
 
@@ -1100,7 +1145,10 @@ const Dashboard: React.FC = () => {
                               <Edit2 size={18} />
                             </button>
                             <button 
-                              onClick={() => handleExportMailbox(u.email)} 
+                              onClick={() => {
+                                setExportTargetEmail(u.email);
+                                setShowExportModal(true);
+                              }} 
                               className="btn btn-secondary" 
                               style={{ color: '#10b981', padding: '0.5rem', border: 'none', background: 'transparent', boxShadow: 'none' }}
                               title="Exportar buzón"
@@ -3325,6 +3373,91 @@ const Dashboard: React.FC = () => {
                 </button>
               </div>
             </form>
+          </motion.div>
+        </div>,
+        document.body
+      )}
+
+      {/* Export Options Modal */}
+      {showExportModal && createPortal(
+        <div className="modal-overlay">
+          <motion.div 
+            initial={{ opacity: 0, y: 20 }}
+            animate={{ opacity: 1, y: 0 }}
+            className="modal-content"
+            style={{ maxWidth: '500px', padding: '2rem' }}
+          >
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1.5rem' }}>
+              <h2 style={{ fontSize: '1.5rem', fontWeight: '800', color: '#1e293b', margin: 0 }}>Opciones de Exportación</h2>
+              <button 
+                onClick={() => setShowExportModal(false)}
+                style={{ background: 'transparent', border: 'none', cursor: 'pointer', color: '#94a3b8' }}
+              >
+                <X size={24} />
+              </button>
+            </div>
+            <p style={{ color: '#64748b', fontSize: '0.875rem', marginBottom: '2rem' }}>
+              Seleccione el formato en el que desea exportar la información del buzón <strong>{exportTargetEmail}</strong>.
+            </p>
+            
+            <div style={{ display: 'flex', flexDirection: 'column', gap: '1rem' }}>
+              <button
+                onClick={() => handleExportMailbox(exportTargetEmail)}
+                style={{
+                  display: 'flex', alignItems: 'center', gap: '1rem', padding: '1.25rem',
+                  background: '#f8fafc', border: '1px solid #e2e8f0', borderRadius: '0.75rem',
+                  cursor: 'pointer', transition: 'all 0.2s', textAlign: 'left'
+                }}
+                onMouseOver={(e) => { e.currentTarget.style.borderColor = '#10b981'; e.currentTarget.style.background = '#ecfdf5'; }}
+                onMouseOut={(e) => { e.currentTarget.style.borderColor = '#e2e8f0'; e.currentTarget.style.background = '#f8fafc'; }}
+              >
+                <div style={{ background: '#d1fae5', padding: '0.75rem', borderRadius: '0.5rem', color: '#059669' }}>
+                  <Download size={24} />
+                </div>
+                <div>
+                  <h4 style={{ margin: 0, fontSize: '1rem', fontWeight: '600', color: '#1e293b' }}>Respaldo Completo (ZIP)</h4>
+                  <p style={{ margin: '0.25rem 0 0 0', fontSize: '0.813rem', color: '#64748b' }}>Ideal para migrar o restaurar el buzón en el futuro.</p>
+                </div>
+              </button>
+
+              <button
+                onClick={() => handleExportPDF(exportTargetEmail)}
+                style={{
+                  display: 'flex', alignItems: 'center', gap: '1rem', padding: '1.25rem',
+                  background: '#f8fafc', border: '1px solid #e2e8f0', borderRadius: '0.75rem',
+                  cursor: 'pointer', transition: 'all 0.2s', textAlign: 'left'
+                }}
+                onMouseOver={(e) => { e.currentTarget.style.borderColor = '#f43f5e'; e.currentTarget.style.background = '#fff1f2'; }}
+                onMouseOut={(e) => { e.currentTarget.style.borderColor = '#e2e8f0'; e.currentTarget.style.background = '#f8fafc'; }}
+              >
+                <div style={{ background: '#ffe4e6', padding: '0.75rem', borderRadius: '0.5rem', color: '#e11d48' }}>
+                  <FileText size={24} />
+                </div>
+                <div>
+                  <h4 style={{ margin: 0, fontSize: '1rem', fontWeight: '600', color: '#1e293b' }}>Paquete de Mensajes (PDF)</h4>
+                  <p style={{ margin: '0.25rem 0 0 0', fontSize: '0.813rem', color: '#64748b' }}>Documento formal con el contenido de los mensajes seleccionados.</p>
+                </div>
+              </button>
+
+              <button
+                onClick={() => handleExportData(exportTargetEmail)}
+                style={{
+                  display: 'flex', alignItems: 'center', gap: '1rem', padding: '1.25rem',
+                  background: '#f8fafc', border: '1px solid #e2e8f0', borderRadius: '0.75rem',
+                  cursor: 'pointer', transition: 'all 0.2s', textAlign: 'left'
+                }}
+                onMouseOver={(e) => { e.currentTarget.style.borderColor = '#3b82f6'; e.currentTarget.style.background = '#eff6ff'; }}
+                onMouseOut={(e) => { e.currentTarget.style.borderColor = '#e2e8f0'; e.currentTarget.style.background = '#f8fafc'; }}
+              >
+                <div style={{ background: '#dbeafe', padding: '0.75rem', borderRadius: '0.5rem', color: '#2563eb' }}>
+                  <Database size={24} />
+                </div>
+                <div>
+                  <h4 style={{ margin: 0, fontSize: '1rem', fontWeight: '600', color: '#1e293b' }}>Estructura de Datos (JSON)</h4>
+                  <p style={{ margin: '0.25rem 0 0 0', fontSize: '0.813rem', color: '#64748b' }}>Exporta metadatos e información estructurada para análisis.</p>
+                </div>
+              </button>
+            </div>
           </motion.div>
         </div>,
         document.body
