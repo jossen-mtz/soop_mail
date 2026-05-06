@@ -77,6 +77,15 @@ def startup_tasks():
         except Exception as e:
             print(f"ERROR: Could not initialize {ALIAS_META_FILE}: {str(e)}")
 
+    # Force sync of the vmailbox map to ensure all existing users are recognized by Postfix
+    if os.name != 'nt':
+        try:
+            print("INFO: Synchronizing Postfix vmailbox maps...")
+            users = read_users_file()
+            update_postfix_vmailbox(users)
+        except Exception as e:
+            print(f"ERROR: Failed to sync Postfix vmailbox on startup: {str(e)}")
+
     for name, path in files_to_check.items():
         exists = os.path.exists(path)
         parent_dir = os.path.dirname(path)
@@ -179,12 +188,22 @@ def discover_users_file():
             return c
     return resolve_path(env_users, 'users')
 
+def discover_postfix_file(env_var, default_name, std_path):
+    env_val = os.environ.get(env_var, '')
+    if env_val:
+        resolved = resolve_path(env_val, default_name)
+        if os.path.exists(resolved):
+            return resolved
+    if os.path.exists(std_path):
+        return std_path
+    return resolve_path(env_val, default_name)
+
 USERS_FILE = discover_users_file()
 ALIAS_META_FILE = resolve_path(os.environ.get('ALIAS_META_FILE', ''), 'aliases_meta.json')
-SENDER_BCC_FILE = resolve_path(os.environ.get('SENDER_BCC_FILE', ''), 'sender_bcc')
-RECIPIENT_BCC_FILE = resolve_path(os.environ.get('RECIPIENT_BCC_FILE', ''), 'recipient_bcc')
-VIRTUAL_MAP = resolve_path(os.environ.get('POSTFIX_VIRTUAL', ''), 'virtual')
-VMAILBOX_MAP = resolve_path(os.environ.get('POSTFIX_VMAILBOX', ''), 'vmailbox')
+SENDER_BCC_FILE = discover_postfix_file('SENDER_BCC_FILE', 'sender_bcc', '/etc/postfix/sender_bcc')
+RECIPIENT_BCC_FILE = discover_postfix_file('RECIPIENT_BCC_FILE', 'recipient_bcc', '/etc/postfix/recipient_bcc')
+VIRTUAL_MAP = discover_postfix_file('POSTFIX_VIRTUAL', 'virtual', '/etc/postfix/virtual')
+VMAILBOX_MAP = discover_postfix_file('POSTFIX_VMAILBOX', 'vmailbox', '/etc/postfix/vmailbox')
 
 # Backward compatibility aliases
 POSTFIX_VIRTUAL = VIRTUAL_MAP
