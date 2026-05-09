@@ -2267,10 +2267,14 @@ def sync_email_traffic(db: Session):
                         qids_seen.add(qid)
                         if qid in outgoing_qids:
                             daily_counts[line_date]["sent"] += 1
-                        elif any(r in line for r in ["relay=local", "relay=virtual", "relay=lmtp", "relay=dovecot"]):
+                        # Detectar correos recibidos por relay local/dovecot-lmtp o direcciones IP locales
+                        elif any(r in line for r in ["relay=local", "relay=virtual", "relay=lmtp", "relay=dovecot", "private/dovecot-lmtp", "relay=127.0.0.1", "relay=[::1]"]):
                             daily_counts[line_date]["received"] += 1
                             
-        print(f"DEBUG SYNC: Parsed {len(lines)} lines. Counts grouped by date: {daily_counts}")
+        print(f"DEBUG SYNC: Parsed {len(lines)} lines from {target_log}")
+        print(f"DEBUG SYNC: Outgoing QIDs detected: {len(outgoing_qids)}")
+        print(f"DEBUG SYNC: Total unique QIDs processed: {len(qids_seen)}")
+        print(f"DEBUG SYNC: Counts grouped by date: {daily_counts}")
         
         for date_str, counts in daily_counts.items():
             dt = datetime.strptime(date_str, "%Y-%m-%d")
