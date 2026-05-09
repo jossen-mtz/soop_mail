@@ -82,18 +82,23 @@ setup_mail_directories() {
         mkdir -p "$MAIL_BASE"
     fi
     
+    # Agregar www-data al grupo vmail para que pueda leer los correos
+    print_success "Agregando $WWW_USER al grupo $VMAIL_GROUP"
+    usermod -aG $VMAIL_GROUP $WWW_USER
+    
     # Establecer ownership principal
     print_success "Estableciendo ownership: $VMAIL_USER:$VMAIL_GROUP en $MAIL_BASE"
     chown -R $VMAIL_USER:$VMAIL_GROUP "$MAIL_BASE"
     
-    # Permisos estrictos para buzones (solo vmail puede leer/escribir)
-    chmod 755 "$MAIL_BASE"
+    # Permisos para que el grupo pueda leer (750 para directorios, 640 para archivos)
+    print_success "Configurando permisos: grupo puede leer correos"
+    chmod 750 "$MAIL_BASE"
     
-    # Si existen buzones, asegurar permisos
+    # Si existen buzones, asegurar permisos que permitan lectura al grupo
     if [ -d "$MAIL_BASE" ] && [ "$(ls -A $MAIL_BASE 2>/dev/null)" ]; then
-        print_success "Asegurando permisos de buzones existentes"
-        find "$MAIL_BASE" -type d -exec chmod 700 {} \; 2>/dev/null || true
-        find "$MAIL_BASE" -type f -exec chmod 600 {} \; 2>/dev/null || true
+        print_success "Asegurando permisos de buzones existentes (750/640)"
+        find "$MAIL_BASE" -type d -exec chmod 750 {} \; 2>/dev/null || true
+        find "$MAIL_BASE" -type f -exec chmod 640 {} \; 2>/dev/null || true
     fi
 }
 
