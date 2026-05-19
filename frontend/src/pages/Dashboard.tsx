@@ -86,12 +86,14 @@ const Dashboard: React.FC = () => {
   const [importFile, setImportFile] = useState<File | null>(null);
   const [importPassword, setImportPassword] = useState({ password: '', password_confirm: '' });
   const [importStatus, setImportStatus] = useState('active');
-  const [importResult, setImportResult] = useState<{
-    created: string[];
-    skipped: { email: string; reason?: string }[];
-    failed: { email: string; reason?: string }[];
+  const [importPreview, setImportPreview] = useState<{
+    items: { email: string; status: 'new' | 'exists' }[];
     parse_warnings: string[];
+    to_create_count: number;
+    exists_count: number;
+    total_rows: number;
   } | null>(null);
+  const [importPreviewLoading, setImportPreviewLoading] = useState(false);
   const [newUser, setNewUser] = useState({ 
     email: '', 
     password: '', 
@@ -643,7 +645,29 @@ const Dashboard: React.FC = () => {
     setImportFile(null);
     setImportPassword({ password: '', password_confirm: '' });
     setImportStatus('active');
-    setImportResult(null);
+    setImportPreview(null);
+    setImportPreviewLoading(false);
+  };
+
+  const handleImportFileChange = async (file: File | null) => {
+    setImportFile(file);
+    setImportPreview(null);
+    if (!file) return;
+
+    setImportPreviewLoading(true);
+    try {
+      const formData = new FormData();
+      formData.append('file', file);
+      const response = await api.post('/api/mail/users/import/preview', formData, {
+        headers: { 'Content-Type': 'multipart/form-data' },
+      });
+      setImportPreview(response.data);
+    } catch (err: any) {
+      setImportFile(null);
+      showNotification(formatError(err.response?.data?.detail) || 'No se pudo leer el Excel', 'error');
+    } finally {
+      setImportPreviewLoading(false);
+    }
   };
 
   const handleDownloadImportTemplate = async () => {
@@ -672,8 +696,12 @@ const Dashboard: React.FC = () => {
       showNotification('Las contraseñas no coinciden', 'error');
       return;
     }
+    if (importPreview && importPreview.to_create_count === 0) {
+      showNotification('No hay correos nuevos para importar en este archivo', 'error');
+      return;
+    }
+
     setActionLoading(true);
-    setImportResult(null);
     try {
       const formData = new FormData();
       formData.append('file', importFile);
@@ -686,20 +714,22 @@ const Dashboard: React.FC = () => {
         headers: { 'Content-Type': 'multipart/form-data' },
       });
       const data = response.data;
-      setImportResult(data);
 
       const createdCount = data.created?.length || 0;
       const skippedCount = data.skipped?.length || 0;
       const failedCount = data.failed?.length || 0;
 
       if (createdCount > 0) {
+        fetchMailUsers();
+        resetImportModal();
         showNotification(
-          `Importación completada: ${createdCount} creados, ${skippedCount} omitidos, ${failedCount} fallidos`,
+          `Se importaron ${createdCount} buzón${createdCount === 1 ? '' : 'es'} correctamente` +
+            (skippedCount > 0 ? ` · ${skippedCount} omitido${skippedCount === 1 ? '' : 's'}` : '') +
+            (failedCount > 0 ? ` · ${failedCount} fallido${failedCount === 1 ? '' : 's'}` : ''),
           failedCount > 0 ? 'error' : 'success'
         );
-        fetchMailUsers();
       } else {
-        showNotification('No se creó ningún usuario. Revisa el detalle de la importación.', 'error');
+        showNotification('No se creó ningún usuario. Revisa el archivo o la previsualización.', 'error');
       }
     } catch (err: any) {
       showNotification(formatError(err.response?.data?.detail) || 'Error al importar usuarios', 'error');
@@ -1075,7 +1105,7 @@ const Dashboard: React.FC = () => {
                   Exportar Todo
                 </button>
                 <button
-                  onClick={() => { setImportResult(null); setShowImportModal(true); }}
+                  onClick={() => setShowImportModal(true)}
                   className="btn btn-secondary"
                   style={{ padding: '0.75rem 1.5rem', borderRadius: '0.875rem', display: 'flex', alignItems: 'center', gap: '0.5rem' }}
                 >
@@ -2511,15 +2541,71 @@ const Dashboard: React.FC = () => {
                   <input
                     type="file"
                     accept=".xlsx,.xls"
-                    onChange={(e) => setImportFile(e.target.files?.[0] || null)}
+                    onChange={(e) => handleImportFileChange(e.target.files?.[0] || null)}
                     required
                   />
                   <Upload size={28} className="import-modal__file-zone-icon" />
                   <span className="import-modal__file-name">
-                    {importFile ? importFile.name : 'Haz clic o arrastra tu Excel aquí'}
+                    {importPreviewLoading
+                      ? 'Analizando archivo...'
+                      : importFile
+                        ? importFile.name
+                        : 'Haz clic o arrastra tu Excel aquí'}
                   </span>
                   <span className="import-modal__file-hint">Formatos: .xlsx, .xls</span>
                 </label>
+
+                {importPreviewLoading && (
+                  <p className="import-modal__preview-loading">Generando previsualización…</p>
+                )}
+
+                {importPreview && !importPreviewLoading && (
+                  <section className="import-modal__preview" aria-label="Previsualización de importación">
+                    <div className="import-modal__preview-header">
+                      <p className="import-modal__section-label" style={{ marginBottom: 0 }}>
+                        Previsualización
+                      </p>
+                      <span className="import-modal__preview-total">{importPreview.total_rows} correos</span>
+                    </div>
+                    <div className="import-modal__results-stats">
+                      <span className="import-modal__stat import-modal__stat--success">
+                        <CheckCircle size={14} />
+                        {importPreview.to_create_count} nuevos
+                      </span>
+                      {importPreview.exists_count > 0 && (
+                        <span className="import-modal__stat import-modal__stat--warn">
+                          <AlertTriangle size={14} />
+                          {importPreview.exists_count} ya existen
+                        </span>
+                      )}
+                      {importPreview.parse_warnings.length > 0 && (
+                        <span className="import-modal__stat import-modal__stat--error">
+                          <AlertCircle size={14} />
+                          {importPreview.parse_warnings.length} avisos
+                        </span>
+                      )}
+                    </div>
+                    <ul className="import-modal__preview-list">
+                      {importPreview.items.map((item) => (
+                        <li key={item.email} className="import-modal__preview-row">
+                          <span className="import-modal__preview-email">{item.email}</span>
+                          <span
+                            className={`import-modal__preview-badge import-modal__preview-badge--${item.status === 'new' ? 'new' : 'exists'}`}
+                          >
+                            {item.status === 'new' ? 'Nuevo' : 'Ya existe'}
+                          </span>
+                        </li>
+                      ))}
+                    </ul>
+                    {importPreview.parse_warnings.length > 0 && (
+                      <div className="import-modal__preview-warnings">
+                        {importPreview.parse_warnings.map((w) => (
+                          <p key={w}>{w}</p>
+                        ))}
+                      </div>
+                    )}
+                  </section>
+                )}
 
                 <div className="import-modal__grid">
                   <div className="input-group">
@@ -2571,46 +2657,26 @@ const Dashboard: React.FC = () => {
                   </select>
                 </div>
 
-                {importResult && (
-                  <div className="import-modal__results">
-                    <div className="import-modal__results-stats">
-                    <span className="import-modal__stat import-modal__stat--success">
-                      <CheckCircle size={14} />
-                      {importResult.created.length} creados
-                    </span>
-                    {importResult.skipped.length > 0 && (
-                      <span className="import-modal__stat import-modal__stat--warn">
-                        <AlertTriangle size={14} />
-                        {importResult.skipped.length} omitidos
-                      </span>
-                    )}
-                    {importResult.failed.length > 0 && (
-                      <span className="import-modal__stat import-modal__stat--error">
-                        <AlertCircle size={14} />
-                        {importResult.failed.length} fallidos
-                      </span>
-                    )}
-                  </div>
-                  {importResult.skipped.length > 0 && (
-                    <p className="import-modal__results-detail">
-                      <strong>Omitidos:</strong> {importResult.skipped.map((s) => s.email).join(', ')}
-                    </p>
-                  )}
-                  {importResult.failed.length > 0 && (
-                    <p className="import-modal__results-detail">
-                      <strong>Fallidos:</strong>{' '}
-                      {importResult.failed.map((f) => `${f.email} (${f.reason})`).join('; ')}
-                    </p>
-                  )}
-                </div>
-              )}
-
               <footer className="import-modal__footer">
                 <button type="button" onClick={resetImportModal} className="btn btn-secondary">
                   Cancelar
                 </button>
-                <button type="submit" className="btn btn-primary" disabled={actionLoading || !importFile}>
-                  {actionLoading ? 'Importando...' : 'Importar correos'}
+                <button
+                  type="submit"
+                  className="btn btn-primary"
+                  disabled={
+                    actionLoading ||
+                    !importFile ||
+                    importPreviewLoading ||
+                    !importPreview ||
+                    importPreview.to_create_count === 0
+                  }
+                >
+                  {actionLoading
+                    ? 'Importando...'
+                    : importPreview
+                      ? `Importar ${importPreview.to_create_count} correo${importPreview.to_create_count === 1 ? '' : 's'}`
+                      : 'Importar correos'}
                 </button>
               </footer>
             </form>

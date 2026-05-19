@@ -1382,6 +1382,47 @@ async def download_mail_import_template(
     )
 
 
+@app.post("/api/mail/users/import/preview", response_model=schemas.SoopMailImportPreview)
+async def preview_mail_import_from_excel(
+    file: UploadFile = File(...),
+    current_user: models.User = Depends(auth.get_current_active_user),
+):
+    filename = (file.filename or "").lower()
+    if not filename.endswith((".xlsx", ".xls")):
+        raise HTTPException(status_code=400, detail="El archivo debe ser Excel (.xlsx o .xls)")
+
+    content = await file.read()
+    if not content:
+        raise HTTPException(status_code=400, detail="El archivo está vacío")
+
+    try:
+        emails, parse_warnings = parse_emails_from_excel(content, DEFAULT_DOMAIN)
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+
+    users = read_users_file()
+    existing_emails = {u["email"].lower() for u in users}
+
+    items: List[schemas.SoopMailImportPreviewItem] = []
+    to_create_count = 0
+    exists_count = 0
+    for email in emails:
+        if email in existing_emails:
+            items.append(schemas.SoopMailImportPreviewItem(email=email, status="exists"))
+            exists_count += 1
+        else:
+            items.append(schemas.SoopMailImportPreviewItem(email=email, status="new"))
+            to_create_count += 1
+
+    return schemas.SoopMailImportPreview(
+        items=items,
+        parse_warnings=parse_warnings,
+        to_create_count=to_create_count,
+        exists_count=exists_count,
+        total_rows=len(emails),
+    )
+
+
 @app.post("/api/mail/users/import", response_model=schemas.SoopMailImportResult)
 async def import_mail_users_from_excel(
     request: Request,

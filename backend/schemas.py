@@ -153,6 +153,19 @@ class SoopMailImportRowResult(BaseModel):
     reason: Optional[str] = None
 
 
+class SoopMailImportPreviewItem(BaseModel):
+    email: str
+    status: str  # "new" | "exists"
+
+
+class SoopMailImportPreview(BaseModel):
+    items: List[SoopMailImportPreviewItem]
+    parse_warnings: List[str] = []
+    to_create_count: int = 0
+    exists_count: int = 0
+    total_rows: int = 0
+
+
 class SoopMailImportResult(BaseModel):
     created: List[str]
     skipped: List[SoopMailImportRowResult]
