@@ -2534,7 +2534,7 @@ const Dashboard: React.FC = () => {
                 </button>
               </div>
 
-              <form onSubmit={handleImportUsers}>
+              <form id="import-users-form" onSubmit={handleImportUsers}>
                 <p className="import-modal__section-label">Archivo y credenciales</p>
 
                 <label className={`import-modal__file-zone ${importFile ? 'import-modal__file-zone--selected' : ''}`}>
@@ -2656,31 +2656,32 @@ const Dashboard: React.FC = () => {
                     <option value="read-only">Solo Lectura</option>
                   </select>
                 </div>
-
-              <footer className="import-modal__footer">
-                <button type="button" onClick={resetImportModal} className="btn btn-secondary">
-                  Cancelar
-                </button>
-                <button
-                  type="submit"
-                  className="btn btn-primary"
-                  disabled={
-                    actionLoading ||
-                    !importFile ||
-                    importPreviewLoading ||
-                    !importPreview ||
-                    importPreview.to_create_count === 0
-                  }
-                >
-                  {actionLoading
-                    ? 'Importando...'
-                    : importPreview
-                      ? `Importar ${importPreview.to_create_count} correo${importPreview.to_create_count === 1 ? '' : 's'}`
-                      : 'Importar correos'}
-                </button>
-              </footer>
-            </form>
+              </form>
             </div>
+
+            <footer className="import-modal__footer">
+              <button type="button" onClick={resetImportModal} className="btn btn-secondary">
+                Cancelar
+              </button>
+              <button
+                type="submit"
+                form="import-users-form"
+                className="btn btn-primary"
+                disabled={
+                  actionLoading ||
+                  !importFile ||
+                  importPreviewLoading ||
+                  !importPreview ||
+                  importPreview.to_create_count === 0
+                }
+              >
+                {actionLoading
+                  ? 'Importando...'
+                  : importPreview
+                    ? `Importar ${importPreview.to_create_count} correo${importPreview.to_create_count === 1 ? '' : 's'}`
+                    : 'Importar correos'}
+              </button>
+            </footer>
           </motion.div>
         </div>,
         document.body

@@ -392,13 +392,21 @@ tr:hover td {
 
 /* Import Excel modal */
 .import-modal {
+  display: flex;
+  flex-direction: column;
   max-width: 560px;
+  max-height: min(90vh, 720px);
   padding: 0;
   overflow: hidden;
   border: 1px solid var(--border);
 }
 
+.import-modal.modal-content {
+  overflow: hidden;
+}
+
 .import-modal__header {
+  flex-shrink: 0;
   padding: 1.5rem 1.75rem 1.25rem;
   background: linear-gradient(180deg, var(--primary-light) 0%, #ffffff 100%);
   border-bottom: 1px solid var(--border);
@@ -467,12 +475,19 @@ tr:hover td {
 }
 
 .import-modal__body {
-  padding: 1.5rem 1.75rem 1.75rem;
+  flex: 1;
+  min-height: 0;
+  overflow-x: hidden;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  padding: 1.5rem 1.75rem;
+  -webkit-overflow-scrolling: touch;
 }
 
 .import-modal__body form {
   display: flex;
   flex-direction: column;
+  min-height: min-content;
 }
 
 .import-modal__body form > .input-group {
@@ -691,12 +706,14 @@ tr:hover td {
 }
 
 .import-modal__footer {
+  flex-shrink: 0;
   display: flex;
   gap: 0.75rem;
   justify-content: flex-end;
-  padding-top: 1.25rem;
-  margin-top: 0.25rem;
+  padding: 1rem 1.75rem 1.25rem;
   border-top: 1px solid var(--border);
+  background: #fff;
+  box-shadow: 0 -4px 12px rgba(15, 23, 42, 0.06);
 }
 
 .import-modal__footer .btn {
@@ -739,7 +756,7 @@ tr:hover td {
   list-style: none;
   margin: 0.75rem 0 0;
   padding: 0;
-  max-height: 140px;
+  max-height: 120px;
   overflow-y: auto;
   border: 1px solid var(--border);
   border-radius: 0.5rem;
