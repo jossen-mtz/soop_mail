@@ -563,7 +563,7 @@ const Dashboard: React.FC = () => {
     }
   };
 
-  const handleGeneratePassword = async (target: 'new' | 'edit' | 'profile') => {
+  const handleGeneratePassword = async (target: 'new' | 'edit' | 'profile' | 'import') => {
     try {
       const response = await api.get('/api/system/utils/generate-password');
       const pwd = response.data.password;
@@ -572,6 +572,8 @@ const Dashboard: React.FC = () => {
         setNewUser(prev => ({ ...prev, password: pwd, password_confirm: pwd }));
       } else if (target === 'edit') {
         setEditMailUserData(prev => ({ ...prev, password: pwd, password_confirm: pwd }));
+      } else if (target === 'import') {
+        setImportPassword({ password: pwd, password_confirm: pwd });
       } else if (target === 'profile') {
         setPasswordForm(prev => ({ ...prev, new_password: pwd, confirm_password: pwd }));
       }
@@ -2459,46 +2461,74 @@ const Dashboard: React.FC = () => {
       </AnimatePresence>
 
       {showImportModal && createPortal(
-        <div className="modal-overlay">
+        <div className="modal-overlay" onClick={resetImportModal}>
           <motion.div
-            initial={{ opacity: 0, y: 20 }}
-            animate={{ opacity: 1, y: 0 }}
-            className="modal-content"
-            style={{ maxWidth: '560px', padding: '2rem' }}
+            initial={{ opacity: 0, y: 16, scale: 0.98 }}
+            animate={{ opacity: 1, y: 0, scale: 1 }}
+            className="modal-content import-modal"
+            onClick={(e) => e.stopPropagation()}
           >
-            <h2 style={{ fontSize: '1.5rem', fontWeight: '800', marginBottom: '0.5rem', color: '#1e293b', display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
-              <FileSpreadsheet size={22} />
-              Importar desde Excel
-            </h2>
-            <p style={{ color: '#64748b', fontSize: '0.875rem', marginBottom: '1.5rem' }}>
-              La plantilla solo necesita la columna <strong>correo</strong>. Todos los buzones importados usarán la misma contraseña genérica.
-            </p>
+            <header className="import-modal__header">
+              <button type="button" className="import-modal__close" onClick={resetImportModal} aria-label="Cerrar">
+                <X size={18} />
+              </button>
+              <div className="import-modal__header-top">
+                <div className="import-modal__icon-wrap">
+                  <FileSpreadsheet size={24} />
+                </div>
+                <div>
+                  <h2 className="import-modal__title">Importar desde Excel</h2>
+                  <p className="import-modal__subtitle">
+                    Columna <strong>correo</strong> en la plantilla. Todos los buzones compartirán la misma contraseña.
+                  </p>
+                </div>
+              </div>
+            </header>
 
-            <button
-              type="button"
-              onClick={handleDownloadImportTemplate}
-              className="btn btn-secondary"
-              style={{ width: '100%', marginBottom: '1.25rem', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '0.5rem' }}
-            >
-              <Download size={16} />
-              Descargar plantilla Excel
-            </button>
-
-            <form onSubmit={handleImportUsers}>
-              <div className="input-group">
-                <label>Archivo Excel (.xlsx)</label>
-                <input
-                  type="file"
-                  accept=".xlsx,.xls"
-                  className="input-control"
-                  onChange={(e) => setImportFile(e.target.files?.[0] || null)}
-                  required
-                />
+            <div className="import-modal__body">
+              <div className="import-modal__template">
+                <div className="import-modal__template-icon">
+                  <FileSpreadsheet size={20} />
+                </div>
+                <div className="import-modal__template-text">
+                  <strong>Plantilla de importación</strong>
+                  <span>Una columna: correo (.xlsx)</span>
+                </div>
+                <button
+                  type="button"
+                  onClick={handleDownloadImportTemplate}
+                  className="btn btn-secondary import-modal__template-btn"
+                >
+                  <Download size={16} />
+                  Descargar
+                </button>
               </div>
 
-              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '1rem' }}>
-                <div className="input-group">
-                  <label>Contraseña genérica</label>
+              <form onSubmit={handleImportUsers}>
+                <p className="import-modal__section-label">Archivo y credenciales</p>
+
+                <label className={`import-modal__file-zone ${importFile ? 'import-modal__file-zone--selected' : ''}`}>
+                  <input
+                    type="file"
+                    accept=".xlsx,.xls"
+                    onChange={(e) => setImportFile(e.target.files?.[0] || null)}
+                    required
+                  />
+                  <Upload size={28} className="import-modal__file-zone-icon" />
+                  <span className="import-modal__file-name">
+                    {importFile ? importFile.name : 'Haz clic o arrastra tu Excel aquí'}
+                  </span>
+                  <span className="import-modal__file-hint">Formatos: .xlsx, .xls</span>
+                </label>
+
+                <div className="import-modal__grid">
+                  <div className="input-group">
+                    <div className="import-modal__password-toggle">
+                      <label>Contraseña genérica</label>
+                      <button type="button" className="import-modal__link-btn" onClick={() => handleGeneratePassword('import')}>
+                        Generar
+                      </button>
+                    </div>
                   <input
                     type={showPassword ? 'text' : 'password'}
                     className="input-control"
@@ -2509,69 +2539,82 @@ const Dashboard: React.FC = () => {
                     minLength={8}
                   />
                 </div>
-                <div className="input-group">
-                  <label>Confirmar contraseña</label>
-                  <input
-                    type={showPassword ? 'text' : 'password'}
-                    className="input-control"
-                    placeholder="Repetir contraseña"
-                    value={importPassword.password_confirm}
-                    onChange={(e) => setImportPassword({ ...importPassword, password_confirm: e.target.value })}
-                    required
-                    minLength={8}
-                  />
+                  <div className="input-group">
+                    <div className="import-modal__password-toggle">
+                      <label>Confirmar</label>
+                      <button type="button" className="import-modal__link-btn" onClick={() => setShowPassword(!showPassword)}>
+                        {showPassword ? 'Ocultar' : 'Mostrar'}
+                      </button>
+                    </div>
+                    <input
+                      type={showPassword ? 'text' : 'password'}
+                      className="input-control"
+                      placeholder="Repetir contraseña"
+                      value={importPassword.password_confirm}
+                      onChange={(e) => setImportPassword({ ...importPassword, password_confirm: e.target.value })}
+                      required
+                      minLength={8}
+                    />
+                  </div>
                 </div>
-              </div>
 
-              <div className="input-group" style={{ marginBottom: '1rem' }}>
-                <label>Estado de las cuentas</label>
-                <select
-                  className="input-control"
-                  value={importStatus}
-                  onChange={(e) => setImportStatus(e.target.value)}
-                >
-                  <option value="active">Activo</option>
-                  <option value="suspended">Suspendido</option>
-                  <option value="read-only">Solo Lectura</option>
-                </select>
-              </div>
+                <div className="input-group">
+                  <label>Estado de las cuentas</label>
+                  <select
+                    className="input-control"
+                    value={importStatus}
+                    onChange={(e) => setImportStatus(e.target.value)}
+                  >
+                    <option value="active">Activo</option>
+                    <option value="suspended">Suspendido</option>
+                    <option value="read-only">Solo Lectura</option>
+                  </select>
+                </div>
 
-              {importResult && (
-                <div
-                  style={{
-                    marginBottom: '1rem',
-                    padding: '1rem',
-                    borderRadius: '0.75rem',
-                    background: '#f8fafc',
-                    border: '1px solid #e2e8f0',
-                    fontSize: '0.8125rem',
-                    maxHeight: '180px',
-                    overflowY: 'auto',
-                  }}
-                >
-                  <div style={{ fontWeight: 700, color: '#166534', marginBottom: '0.35rem' }}>
-                    Creados: {importResult.created.length}
+                {importResult && (
+                  <div className="import-modal__results">
+                    <div className="import-modal__results-stats">
+                    <span className="import-modal__stat import-modal__stat--success">
+                      <CheckCircle size={14} />
+                      {importResult.created.length} creados
+                    </span>
+                    {importResult.skipped.length > 0 && (
+                      <span className="import-modal__stat import-modal__stat--warn">
+                        <AlertTriangle size={14} />
+                        {importResult.skipped.length} omitidos
+                      </span>
+                    )}
+                    {importResult.failed.length > 0 && (
+                      <span className="import-modal__stat import-modal__stat--error">
+                        <AlertCircle size={14} />
+                        {importResult.failed.length} fallidos
+                      </span>
+                    )}
                   </div>
                   {importResult.skipped.length > 0 && (
-                    <div style={{ color: '#92400e', marginBottom: '0.35rem' }}>
-                      Omitidos: {importResult.skipped.map((s) => s.email).join(', ')}
-                    </div>
+                    <p className="import-modal__results-detail">
+                      <strong>Omitidos:</strong> {importResult.skipped.map((s) => s.email).join(', ')}
+                    </p>
                   )}
                   {importResult.failed.length > 0 && (
-                    <div style={{ color: '#991b1b' }}>
-                      Fallidos: {importResult.failed.map((f) => `${f.email} (${f.reason})`).join('; ')}
-                    </div>
+                    <p className="import-modal__results-detail">
+                      <strong>Fallidos:</strong>{' '}
+                      {importResult.failed.map((f) => `${f.email} (${f.reason})`).join('; ')}
+                    </p>
                   )}
                 </div>
               )}
 
-              <div style={{ display: 'flex', gap: '1rem', justifyContent: 'flex-end' }}>
-                <button type="button" onClick={resetImportModal} className="btn btn-secondary">Cancelar</button>
-                <button type="submit" className="btn btn-primary" disabled={actionLoading}>
+              <footer className="import-modal__footer">
+                <button type="button" onClick={resetImportModal} className="btn btn-secondary">
+                  Cancelar
+                </button>
+                <button type="submit" className="btn btn-primary" disabled={actionLoading || !importFile}>
                   {actionLoading ? 'Importando...' : 'Importar correos'}
                 </button>
-              </div>
+              </footer>
             </form>
+            </div>
           </motion.div>
         </div>,
         document.body
