@@ -148,6 +148,19 @@ class SoopMailUserCreate(BaseModel):
             raise ValueError("Las contraseñas no coinciden")
         return v
 
+class SoopMailImportRowResult(BaseModel):
+    email: str
+    reason: Optional[str] = None
+
+
+class SoopMailImportResult(BaseModel):
+    created: List[str]
+    skipped: List[SoopMailImportRowResult]
+    failed: List[SoopMailImportRowResult]
+    parse_warnings: List[str] = []
+    total_rows: int = 0
+
+
 class SoopMailUserUpdate(BaseModel):
     password: Optional[str] = None
     password_confirm: Optional[str] = None

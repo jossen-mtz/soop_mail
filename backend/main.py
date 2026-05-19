@@ -1,3 +1,4 @@
+import io
 import os
 import re
 import subprocess
@@ -6,7 +7,7 @@ from passlib.hash import sha512_crypt
 from datetime import datetime, timedelta
 from typing import List, Optional
 import platform
-from fastapi import FastAPI, Depends, HTTPException, status, Request, BackgroundTasks
+from fastapi import FastAPI, Depends, HTTPException, status, Request, BackgroundTasks, File, UploadFile, Form
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
 from fastapi.responses import FileResponse, StreamingResponse
@@ -18,6 +19,7 @@ import json
 import config
 import models, schemas, auth, database
 from database import engine, get_db, check_db_connection
+from mail_import import parse_emails_from_excel, build_import_template_bytes
 
 # Create database tables
 models.Base.metadata.create_all(bind=engine)
@@ -1311,6 +1313,148 @@ async def export_all_mailboxes(
         raise HTTPException(status_code=500, detail=f"Error exporting all mailboxes: {str(e)}")
 
 
+HELPER_SCRIPT_MAILBOX = "/usr/local/bin/soop_create_mailbox"
+
+
+def _ensure_maildir(user_home: str) -> None:
+    try:
+        if os.name != 'nt' and os.path.exists(HELPER_SCRIPT_MAILBOX):
+            ok, err = _run_privileged([HELPER_SCRIPT_MAILBOX, user_home], "create mailbox")
+            if not ok:
+                print(f"WARNING: Helper script failed: {err}")
+                print("HINT: Install helper with: sudo bash scripts/setup_sudoers.sh")
+                for d in ['new', 'cur', 'tmp']:
+                    os.makedirs(os.path.join(user_home, "Maildir", d), exist_ok=True)
+        else:
+            maildir_path = os.path.join(user_home, "Maildir")
+            for d in ['new', 'cur', 'tmp']:
+                os.makedirs(os.path.join(maildir_path, d), exist_ok=True)
+            if os.name != 'nt':
+                print(f"WARNING: Helper script not found at {HELPER_SCRIPT_MAILBOX}")
+                print("WARNING: Maildir created as www-data, Dovecot may not be able to read it.")
+                print("HINT: Install helper with: sudo bash scripts/setup_sudoers.sh")
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Error creating mail directory: {str(e)}")
+
+
+def _build_mail_user_record(email: str, password: str, status: str, department: Optional[str] = None) -> dict:
+    pw_hash = generate_soop_mail_hash(password)
+    domain = email.split('@')[1]
+    username = email.split('@')[0]
+    user_home = os.path.join(MAIL_BASE, domain, username)
+    _ensure_maildir(user_home)
+    return {
+        'email': email,
+        'hash': pw_hash,
+        'uid': str(VMAIL_UID),
+        'gid': str(VMAIL_GID),
+        'gecos': '',
+        'home': user_home,
+        'shell': '',
+        'status': status,
+        'department': department or ''
+    }
+
+
+def _restart_soop_mail_service() -> None:
+    try:
+        subprocess.run(['systemctl', 'restart', 'soop_mail'], check=True)
+    except Exception:
+        pass
+
+
+def _validate_generic_password(password: str, password_confirm: str) -> None:
+    if password != password_confirm:
+        raise HTTPException(status_code=400, detail="Las contraseñas no coinciden")
+    if len(password) < 8:
+        raise HTTPException(status_code=400, detail="La contraseña debe tener al menos 8 caracteres")
+
+
+@app.get("/api/mail/users/import/template")
+async def download_mail_import_template(
+    current_user: models.User = Depends(auth.get_current_active_user)
+):
+    content = build_import_template_bytes()
+    return StreamingResponse(
+        io.BytesIO(content),
+        media_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+        headers={"Content-Disposition": 'attachment; filename="plantilla_correos.xlsx"'},
+    )
+
+
+@app.post("/api/mail/users/import", response_model=schemas.SoopMailImportResult)
+async def import_mail_users_from_excel(
+    request: Request,
+    file: UploadFile = File(...),
+    password: str = Form(...),
+    password_confirm: str = Form(...),
+    status: str = Form("active"),
+    restart_soop_mail: bool = Form(True),
+    db: Session = Depends(get_db),
+    current_user: models.User = Depends(auth.get_current_active_user),
+):
+    _validate_generic_password(password, password_confirm)
+
+    filename = (file.filename or "").lower()
+    if not filename.endswith((".xlsx", ".xls")):
+        raise HTTPException(status_code=400, detail="El archivo debe ser Excel (.xlsx o .xls)")
+
+    content = await file.read()
+    if not content:
+        raise HTTPException(status_code=400, detail="El archivo está vacío")
+
+    try:
+        emails, parse_warnings = parse_emails_from_excel(content, DEFAULT_DOMAIN)
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+
+    users = read_users_file()
+    existing_emails = {u['email'].lower() for u in users}
+
+    created: List[str] = []
+    skipped: List[schemas.SoopMailImportRowResult] = []
+    failed: List[schemas.SoopMailImportRowResult] = []
+
+    for email in emails:
+        if email in existing_emails:
+            skipped.append(schemas.SoopMailImportRowResult(email=email, reason="El usuario ya existe"))
+            continue
+        try:
+            new_user = _build_mail_user_record(email, password, status)
+            users.append(new_user)
+            existing_emails.add(email)
+            created.append(email)
+        except HTTPException as exc:
+            failed.append(schemas.SoopMailImportRowResult(email=email, reason=str(exc.detail)))
+        except Exception as exc:
+            failed.append(schemas.SoopMailImportRowResult(email=email, reason=str(exc)))
+
+    if created:
+        write_users_file(users)
+        log_audit(
+            db,
+            current_user.id,
+            "IMPORT_MAIL_USERS",
+            "MailUser",
+            None,
+            f"Importados {len(created)} usuarios desde Excel",
+            request=request,
+        )
+        if restart_soop_mail:
+            _restart_soop_mail_service()
+
+    if not created and not skipped and failed:
+        raise HTTPException(status_code=400, detail="No se pudo importar ningún correo")
+
+    return schemas.SoopMailImportResult(
+        created=created,
+        skipped=skipped,
+        failed=failed,
+        parse_warnings=parse_warnings,
+        total_rows=len(emails),
+    )
+
+
 @app.post("/api/mail/users", status_code=status.HTTP_201_CREATED)
 async def create_mail_user(
     user_data: schemas.SoopMailUserCreate, 
@@ -1328,61 +1472,19 @@ async def create_mail_user(
     if any(u['email'] == user_data.email for u in users):
         raise HTTPException(status_code=400, detail="User already exists")
     
-    pw_hash = generate_soop_mail_hash(user_data.password)
-    
-    domain = user_data.email.split('@')[1]
-    username = user_data.email.split('@')[0]
-    # Path following the user script: MAIL_BASE/domain/username
-    user_home = os.path.join(MAIL_BASE, domain, username)
-    # Create Maildir using the privileged helper script.
-    # The helper (installed at /usr/local/bin/soop_create_mailbox) creates
-    # the directory structure with vmail:vmail ownership from the start,
-    # without touching any existing directories.
-    HELPER_SCRIPT = "/usr/local/bin/soop_create_mailbox"
-    
-    try:
-        if os.name != 'nt' and os.path.exists(HELPER_SCRIPT):
-            # Use the dedicated helper script (runs as root via sudoers)
-            ok, err = _run_privileged([HELPER_SCRIPT, user_home], "create mailbox")
-            if not ok:
-                print(f"WARNING: Helper script failed: {err}")
-                print(f"HINT: Install helper with: sudo bash scripts/setup_sudoers.sh")
-                # Fallback: try to create dirs directly (may have wrong ownership)
-                for d in ['new', 'cur', 'tmp']:
-                    os.makedirs(os.path.join(user_home, "Maildir", d), exist_ok=True)
-        else:
-            # Windows dev mode or helper not installed: create dirs directly
-            maildir_path = os.path.join(user_home, "Maildir")
-            for d in ['new', 'cur', 'tmp']:
-                os.makedirs(os.path.join(maildir_path, d), exist_ok=True)
-            if os.name != 'nt':
-                print(f"WARNING: Helper script not found at {HELPER_SCRIPT}")
-                print(f"WARNING: Maildir created as www-data, Dovecot may not be able to read it.")
-                print(f"HINT: Install helper with: sudo bash scripts/setup_sudoers.sh")
-    except Exception as e:
-        raise HTTPException(status_code=500, detail=f"Error creating mail directory: {str(e)}")
-    
-    new_user = {
-        'email': user_data.email,
-        'hash': pw_hash,
-        'uid': str(VMAIL_UID),
-        'gid': str(VMAIL_GID),
-        'gecos': '',
-        'home': user_home,
-        'shell': '',
-        'status': user_data.status,
-        'department': user_data.department or ''
-    }
+    new_user = _build_mail_user_record(
+        user_data.email,
+        user_data.password,
+        user_data.status,
+        user_data.department,
+    )
     users.append(new_user)
     write_users_file(users)
     
     log_audit(db, current_user.id, "CREATE_MAIL_USER", "MailUser", user_data.email, f"Created mail user {user_data.email}", request=request)
     
     if user_data.restart_soop_mail:
-        try:
-            subprocess.run(['systemctl', 'restart', 'soop_mail'], check=True)
-        except:
-            pass # Ignore if not available
+        _restart_soop_mail_service()
             
     return {"message": "User created successfully", "email": user_data.email}
 

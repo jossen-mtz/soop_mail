@@ -27,7 +27,9 @@ import {
   AlertTriangle,
   Menu,
   X,
-  Download
+  Download,
+  Upload,
+  FileSpreadsheet
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { 
@@ -80,6 +82,16 @@ const Dashboard: React.FC = () => {
   const [loading, setLoading] = useState(true);
   const [searchTerm, setSearchTerm] = useState('');
   const [showAddModal, setShowAddModal] = useState(false);
+  const [showImportModal, setShowImportModal] = useState(false);
+  const [importFile, setImportFile] = useState<File | null>(null);
+  const [importPassword, setImportPassword] = useState({ password: '', password_confirm: '' });
+  const [importStatus, setImportStatus] = useState('active');
+  const [importResult, setImportResult] = useState<{
+    created: string[];
+    skipped: { email: string; reason?: string }[];
+    failed: { email: string; reason?: string }[];
+    parse_warnings: string[];
+  } | null>(null);
   const [newUser, setNewUser] = useState({ 
     email: '', 
     password: '', 
@@ -624,6 +636,76 @@ const Dashboard: React.FC = () => {
     }
   };
 
+  const resetImportModal = () => {
+    setShowImportModal(false);
+    setImportFile(null);
+    setImportPassword({ password: '', password_confirm: '' });
+    setImportStatus('active');
+    setImportResult(null);
+  };
+
+  const handleDownloadImportTemplate = async () => {
+    try {
+      const response = await api.get('/api/mail/users/import/template', { responseType: 'blob' });
+      const url = window.URL.createObjectURL(new Blob([response.data]));
+      const link = document.createElement('a');
+      link.href = url;
+      link.setAttribute('download', 'plantilla_correos.xlsx');
+      document.body.appendChild(link);
+      link.click();
+      link.remove();
+      window.URL.revokeObjectURL(url);
+    } catch {
+      showNotification('No se pudo descargar la plantilla', 'error');
+    }
+  };
+
+  const handleImportUsers = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!importFile) {
+      showNotification('Selecciona un archivo Excel', 'error');
+      return;
+    }
+    if (importPassword.password !== importPassword.password_confirm) {
+      showNotification('Las contraseñas no coinciden', 'error');
+      return;
+    }
+    setActionLoading(true);
+    setImportResult(null);
+    try {
+      const formData = new FormData();
+      formData.append('file', importFile);
+      formData.append('password', importPassword.password);
+      formData.append('password_confirm', importPassword.password_confirm);
+      formData.append('status', importStatus);
+      formData.append('restart_soop_mail', 'true');
+
+      const response = await api.post('/api/mail/users/import', formData, {
+        headers: { 'Content-Type': 'multipart/form-data' },
+      });
+      const data = response.data;
+      setImportResult(data);
+
+      const createdCount = data.created?.length || 0;
+      const skippedCount = data.skipped?.length || 0;
+      const failedCount = data.failed?.length || 0;
+
+      if (createdCount > 0) {
+        showNotification(
+          `Importación completada: ${createdCount} creados, ${skippedCount} omitidos, ${failedCount} fallidos`,
+          failedCount > 0 ? 'error' : 'success'
+        );
+        fetchMailUsers();
+      } else {
+        showNotification('No se creó ningún usuario. Revisa el detalle de la importación.', 'error');
+      }
+    } catch (err: any) {
+      showNotification(formatError(err.response?.data?.detail) || 'Error al importar usuarios', 'error');
+    } finally {
+      setActionLoading(false);
+    }
+  };
+
   const handleDeleteUser = (email: string) => {
     setDeleteConfig({
       title: 'Eliminar Usuario de Correo',
@@ -989,6 +1071,14 @@ const Dashboard: React.FC = () => {
                 >
                   <Download size={20} />
                   Exportar Todo
+                </button>
+                <button
+                  onClick={() => { setImportResult(null); setShowImportModal(true); }}
+                  className="btn btn-secondary"
+                  style={{ padding: '0.75rem 1.5rem', borderRadius: '0.875rem', display: 'flex', alignItems: 'center', gap: '0.5rem' }}
+                >
+                  <Upload size={20} />
+                  Importar Excel
                 </button>
                 <button onClick={() => setShowAddModal(true)} className="btn btn-primary" style={{ padding: '0.75rem 1.5rem', borderRadius: '0.875rem' }}>
                   <Plus size={20} />
@@ -2367,6 +2457,125 @@ const Dashboard: React.FC = () => {
           </motion.div>
         )}
       </AnimatePresence>
+
+      {showImportModal && createPortal(
+        <div className="modal-overlay">
+          <motion.div
+            initial={{ opacity: 0, y: 20 }}
+            animate={{ opacity: 1, y: 0 }}
+            className="modal-content"
+            style={{ maxWidth: '560px', padding: '2rem' }}
+          >
+            <h2 style={{ fontSize: '1.5rem', fontWeight: '800', marginBottom: '0.5rem', color: '#1e293b', display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+              <FileSpreadsheet size={22} />
+              Importar desde Excel
+            </h2>
+            <p style={{ color: '#64748b', fontSize: '0.875rem', marginBottom: '1.5rem' }}>
+              La plantilla solo necesita la columna <strong>correo</strong>. Todos los buzones importados usarán la misma contraseña genérica.
+            </p>
+
+            <button
+              type="button"
+              onClick={handleDownloadImportTemplate}
+              className="btn btn-secondary"
+              style={{ width: '100%', marginBottom: '1.25rem', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '0.5rem' }}
+            >
+              <Download size={16} />
+              Descargar plantilla Excel
+            </button>
+
+            <form onSubmit={handleImportUsers}>
+              <div className="input-group">
+                <label>Archivo Excel (.xlsx)</label>
+                <input
+                  type="file"
+                  accept=".xlsx,.xls"
+                  className="input-control"
+                  onChange={(e) => setImportFile(e.target.files?.[0] || null)}
+                  required
+                />
+              </div>
+
+              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '1rem' }}>
+                <div className="input-group">
+                  <label>Contraseña genérica</label>
+                  <input
+                    type={showPassword ? 'text' : 'password'}
+                    className="input-control"
+                    placeholder="Mínimo 8 caracteres"
+                    value={importPassword.password}
+                    onChange={(e) => setImportPassword({ ...importPassword, password: e.target.value })}
+                    required
+                    minLength={8}
+                  />
+                </div>
+                <div className="input-group">
+                  <label>Confirmar contraseña</label>
+                  <input
+                    type={showPassword ? 'text' : 'password'}
+                    className="input-control"
+                    placeholder="Repetir contraseña"
+                    value={importPassword.password_confirm}
+                    onChange={(e) => setImportPassword({ ...importPassword, password_confirm: e.target.value })}
+                    required
+                    minLength={8}
+                  />
+                </div>
+              </div>
+
+              <div className="input-group" style={{ marginBottom: '1rem' }}>
+                <label>Estado de las cuentas</label>
+                <select
+                  className="input-control"
+                  value={importStatus}
+                  onChange={(e) => setImportStatus(e.target.value)}
+                >
+                  <option value="active">Activo</option>
+                  <option value="suspended">Suspendido</option>
+                  <option value="read-only">Solo Lectura</option>
+                </select>
+              </div>
+
+              {importResult && (
+                <div
+                  style={{
+                    marginBottom: '1rem',
+                    padding: '1rem',
+                    borderRadius: '0.75rem',
+                    background: '#f8fafc',
+                    border: '1px solid #e2e8f0',
+                    fontSize: '0.8125rem',
+                    maxHeight: '180px',
+                    overflowY: 'auto',
+                  }}
+                >
+                  <div style={{ fontWeight: 700, color: '#166534', marginBottom: '0.35rem' }}>
+                    Creados: {importResult.created.length}
+                  </div>
+                  {importResult.skipped.length > 0 && (
+                    <div style={{ color: '#92400e', marginBottom: '0.35rem' }}>
+                      Omitidos: {importResult.skipped.map((s) => s.email).join(', ')}
+                    </div>
+                  )}
+                  {importResult.failed.length > 0 && (
+                    <div style={{ color: '#991b1b' }}>
+                      Fallidos: {importResult.failed.map((f) => `${f.email} (${f.reason})`).join('; ')}
+                    </div>
+                  )}
+                </div>
+              )}
+
+              <div style={{ display: 'flex', gap: '1rem', justifyContent: 'flex-end' }}>
+                <button type="button" onClick={resetImportModal} className="btn btn-secondary">Cancelar</button>
+                <button type="submit" className="btn btn-primary" disabled={actionLoading}>
+                  {actionLoading ? 'Importando...' : 'Importar correos'}
+                </button>
+              </div>
+            </form>
+          </motion.div>
+        </div>,
+        document.body
+      )}
 
       {showAddModal && createPortal(
         <div className="modal-overlay">

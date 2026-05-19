@@ -10,3 +10,6 @@ pydantic[email]
 email-validator
 pydantic-settings
 python-dotenv
+polars
+fastexcel
+xlsx2csv
