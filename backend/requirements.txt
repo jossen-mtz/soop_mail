@@ -13,4 +13,5 @@ python-dotenv
 # Importación masiva desde Excel
 polars>=1.0.0
 fastexcel>=0.10.0
+xlsxwriter>=3.0.0
 xlsx2csv>=0.8.0

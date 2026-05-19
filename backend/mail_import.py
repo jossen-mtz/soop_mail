@@ -97,5 +97,6 @@ def build_import_template_bytes() -> bytes:
         }
     )
     buffer = io.BytesIO()
-    df.write_excel(buffer)
+    df.write_excel(buffer, worksheet="correos")
+    buffer.seek(0)
     return buffer.getvalue()
